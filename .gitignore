@@ -29,7 +29,6 @@ bower_components
 build/Release
 
 # Dependency directories
-node_modules/
 jspm_packages/
 
 # Optional npm cache directory
@@ -70,16 +69,3 @@ logs
 # Temporary files
 tmp/
 temp/
-
-# Build outputs
-dist/
-build/
-
-# Cache
-.cache/
-
-# Local development
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
