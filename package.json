@@ -1,0 +1,28 @@
+{
+  "name": "binance-triangle-monitor",
+  "version": "1.0.0",
+  "description": "实时监控币安合约交易平台前20个热门币种K线图和三角形态检测",
+  "main": "index.html",
+  "scripts": {
+    "start": "http-server -p 8080 -c-1",
+    "dev": "http-server -p 8080 -c-1 -o"
+  },
+  "keywords": [
+    "binance",
+    "cryptocurrency",
+    "trading",
+    "triangle-pattern",
+    "kline",
+    "real-time"
+  ],
+  "author": "AI Assistant",
+  "license": "MIT",
+  "devDependencies": {
+    "http-server": "^14.1.1"
+  },
+  "dependencies": {
+    "chart.js": "^4.4.0",
+    "chartjs-adapter-date-fns": "^3.0.0",
+    "date-fns": "^2.30.0"
+  }
+}
