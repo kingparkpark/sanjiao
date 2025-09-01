@@ -409,7 +409,8 @@ class CryptoTriangleMonitor {
         const filterMap = {
             [CONFIG.PATTERN_TYPES.ASCENDING]: 'filter-ascending',
             [CONFIG.PATTERN_TYPES.DESCENDING]: 'filter-descending',
-            [CONFIG.PATTERN_TYPES.SYMMETRICAL]: 'filter-symmetrical'
+            [CONFIG.PATTERN_TYPES.SYMMETRICAL]: 'filter-symmetrical',
+            [CONFIG.PATTERN_TYPES.MA_DAXIAN]: 'filter-ma-daxian'
         };
         
         const checkbox = document.getElementById(filterMap[patternType]);

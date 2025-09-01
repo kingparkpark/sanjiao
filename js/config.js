@@ -100,7 +100,21 @@ const CONFIG = {
             MAX_DEVIATION: 0.02, // 最大偏差（2%）
             MIN_DURATION: 3600000, // 最小持续时间（1小时）
             BREAKOUT_THRESHOLD: 0.005 // 突破阈值（0.5%）
+        },
+        MA_DAXIAN: {
+            PERIODS: [20, 60, 120], // MA和EMA的周期
+            CONVERGENCE_THRESHOLD: 0.001, // 收敛阈值（0.1%）
+            MIN_CONVERGENCE_DURATION: 1800000, // 最小收敛持续时间（30分钟）
+            SIGNAL_STRENGTH: 0.8 // 信号强度阈值
         }
+    },
+    
+    // 形态类型定义
+    PATTERN_TYPES: {
+        ASCENDING: 'ascending_triangle',
+        DESCENDING: 'descending_triangle',
+        SYMMETRICAL: 'symmetrical_triangle',
+        MA_DAXIAN: 'ma_daxian_convergence'
     },
     
     // 通知配置

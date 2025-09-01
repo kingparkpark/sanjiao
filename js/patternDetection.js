@@ -6,7 +6,26 @@ class PatternDetection {
         this.detectedPatterns = new Map();
     }
 
-    // 主要的形态检测函数
+    // 主要的形态检测函数 - 支持多种形态检测
+    detectPatterns(klineData, symbol) {
+        const patterns = [];
+        
+        // 检测三角形态
+        const trianglePattern = this.detectTrianglePatterns(klineData, symbol);
+        if (trianglePattern) {
+            patterns.push(trianglePattern);
+        }
+        
+        // 检测马大仙法则（MA/EMA收敛）
+        const maDaxianPattern = this.detectMaDaxianPattern(klineData, symbol);
+        if (maDaxianPattern) {
+            patterns.push(maDaxianPattern);
+        }
+        
+        return patterns.length > 0 ? patterns : null;
+    }
+
+    // 兼容旧接口：检测三角形态
     detectTrianglePatterns(klineData, symbol) {
         if (!klineData || klineData.length < this.minPoints * 2) {
             return null;
@@ -337,12 +356,168 @@ class PatternDetection {
         }
     }
 
-    // 获取形态描述
+    // 马大仙法则检测（MA/EMA收敛检测）
+    detectMaDaxianPattern(klineData, symbol) {
+        if (!klineData || klineData.length < 120) return null;
+
+        const closes = klineData.map(k => k.c || k.close);
+        
+        // 计算MA和EMA
+        const ma20 = this.calculateMA(closes, 20);
+        const ma60 = this.calculateMA(closes, 60);
+        const ma120 = this.calculateMA(closes, 120);
+        
+        const ema20 = this.calculateEMA(closes, 20);
+        const ema60 = this.calculateEMA(closes, 60);
+        const ema120 = this.calculateEMA(closes, 120);
+        
+        // 获取最新的值
+        const currentMa20 = ma20[ma20.length - 1];
+        const currentMa60 = ma60[ma60.length - 1];
+        const currentMa120 = ma120[ma120.length - 1];
+        const currentEma20 = ema20[ema20.length - 1];
+        const currentEma60 = ema60[ema60.length - 1];
+        const currentEma120 = ema120[ema120.length - 1];
+        
+        if (!currentMa20 || !currentMa60 || !currentMa120 || 
+            !currentEma20 || !currentEma60 || !currentEma120) return null;
+        
+        // 计算收敛程度
+        const maValues = [currentMa20, currentMa60, currentMa120];
+        const emaValues = [currentEma20, currentEma60, currentEma120];
+        const allValues = [...maValues, ...emaValues];
+        
+        const avgPrice = allValues.reduce((sum, val) => sum + val, 0) / allValues.length;
+        const maxDeviation = Math.max(...allValues.map(val => Math.abs(val - avgPrice))) / avgPrice;
+        
+        // 检查是否收敛
+        if (maxDeviation > CONFIG.PATTERN.MA_DAXIAN.CONVERGENCE_THRESHOLD) return null;
+        
+        // 检查收敛持续时间
+        const convergenceDuration = this.checkConvergenceDuration(klineData, ma20, ma60, ma120, ema20, ema60, ema120);
+        if (convergenceDuration < CONFIG.PATTERN.MA_DAXIAN.MIN_CONVERGENCE_DURATION) return null;
+        
+        // 计算信号强度
+        const signalStrength = 1 - (maxDeviation / CONFIG.PATTERN.MA_DAXIAN.CONVERGENCE_THRESHOLD);
+        if (signalStrength < CONFIG.PATTERN.MA_DAXIAN.SIGNAL_STRENGTH) return null;
+        
+        // 获取当前价格
+        const currentPrice = closes[closes.length - 1];
+        
+        // 判断趋势方向
+        const trendDirection = this.determineTrendDirection(ma20, ma60, ma120, ema20, ema60, ema120);
+        
+        return {
+            type: CONFIG.PATTERN_TYPES.MA_DAXIAN,
+            confidence: signalStrength,
+            symbol: symbol,
+            timestamp: Date.now(),
+            currentPrice: currentPrice,
+            maValues: {
+                ma20: currentMa20,
+                ma60: currentMa60,
+                ma120: currentMa120,
+                ema20: currentEma20,
+                ema60: currentEma60,
+                ema120: currentEma120
+            },
+            convergenceDeviation: maxDeviation,
+            convergenceDuration: convergenceDuration,
+            trendDirection: trendDirection,
+            breakoutTargets: {
+                bullish: currentPrice * 1.05, // 5%上涨目标
+                bearish: currentPrice * 0.95  // 5%下跌目标
+            }
+        };
+    }
+
+    // 计算简单移动平均线
+    calculateMA(data, period) {
+        const result = [];
+        for (let i = 0; i < data.length; i++) {
+            if (i < period - 1) {
+                result.push(null);
+            } else {
+                const sum = data.slice(i - period + 1, i + 1).reduce((a, b) => a + b, 0);
+                result.push(sum / period);
+            }
+        }
+        return result;
+    }
+
+    // 计算指数移动平均线
+    calculateEMA(data, period) {
+        const result = [];
+        const multiplier = 2 / (period + 1);
+        
+        for (let i = 0; i < data.length; i++) {
+            if (i === 0) {
+                result.push(data[0]);
+            } else if (i < period - 1) {
+                result.push(null);
+            } else if (i === period - 1) {
+                const sma = data.slice(0, period).reduce((a, b) => a + b, 0) / period;
+                result.push((data[i] - sma) * multiplier + sma);
+            } else {
+                const prevEma = result[i - 1];
+                result.push((data[i] - prevEma) * multiplier + prevEma);
+            }
+        }
+        return result;
+    }
+
+    // 检查收敛持续时间
+    checkConvergenceDuration(klineData, ma20, ma60, ma120, ema20, ema60, ema120) {
+        const convergencePoints = [];
+        const threshold = CONFIG.PATTERN.MA_DAXIAN.CONVERGENCE_THRESHOLD;
+        
+        for (let i = 0; i < klineData.length; i++) {
+            if (ma20[i] && ma60[i] && ma120[i] && ema20[i] && ema60[i] && ema120[i]) {
+                const values = [ma20[i], ma60[i], ma120[i], ema20[i], ema60[i], ema120[i]];
+                const avg = values.reduce((sum, val) => sum + val, 0) / values.length;
+                const maxDev = Math.max(...values.map(val => Math.abs(val - avg))) / avg;
+                
+                if (maxDev <= threshold) {
+                    convergencePoints.push(klineData[i].x || klineData[i].openTime);
+                }
+            }
+        }
+        
+        if (convergencePoints.length < 2) return 0;
+        
+        return convergencePoints[convergencePoints.length - 1] - convergencePoints[0];
+    }
+
+    // 判断趋势方向
+    determineTrendDirection(ma20, ma60, ma120, ema20, ema60, ema120) {
+        const currentMa20 = ma20[ma20.length - 1];
+        const currentMa60 = ma60[ma60.length - 1];
+        const currentMa120 = ma120[ma120.length - 1];
+        
+        const prevMa20 = ma20[ma20.length - 5]; // 5根K线前的值
+        const prevMa60 = ma60[ma60.length - 5];
+        const prevMa120 = ma120[ma120.length - 5];
+        
+        if (!prevMa20 || !prevMa60 || !prevMa120) return 'neutral';
+        
+        const ma20Slope = (currentMa20 - prevMa20) / Math.abs(prevMa20);
+        const ma60Slope = (currentMa60 - prevMa60) / Math.abs(prevMa60);
+        const ma120Slope = (currentMa120 - prevMa120) / Math.abs(prevMa120);
+        
+        const avgSlope = (ma20Slope + ma60Slope + ma120Slope) / 3;
+        
+        if (avgSlope > 0.001) return 'bullish';
+        if (avgSlope < -0.001) return 'bearish';
+        return 'neutral';
+    }
+
+    // 获取形态描述（更新版本，支持马大仙法则）
     getPatternDescription(pattern) {
         const descriptions = {
             [CONFIG.PATTERN_TYPES.ASCENDING]: '上升三角形 - 看涨形态，突破阻力位后可能上涨',
             [CONFIG.PATTERN_TYPES.DESCENDING]: '下降三角形 - 看跌形态，跌破支撑位后可能下跌',
-            [CONFIG.PATTERN_TYPES.SYMMETRICAL]: '收敛三角形 - 中性形态，突破方向决定后续走势'
+            [CONFIG.PATTERN_TYPES.SYMMETRICAL]: '收敛三角形 - 中性形态，突破方向决定后续走势',
+            [CONFIG.PATTERN_TYPES.MA_DAXIAN]: '马大仙法则 - MA/EMA多线收敛，大行情启动信号'
         };
         
         return descriptions[pattern.type] || '未知形态';

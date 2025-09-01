@@ -115,13 +115,15 @@ class NotificationManager {
         const patternNames = {
             [CONFIG.PATTERN_TYPES.ASCENDING]: '上升三角形',
             [CONFIG.PATTERN_TYPES.DESCENDING]: '下降三角形',
-            [CONFIG.PATTERN_TYPES.SYMMETRICAL]: '收敛三角形'
+            [CONFIG.PATTERN_TYPES.SYMMETRICAL]: '收敛三角形',
+            [CONFIG.PATTERN_TYPES.MA_DAXIAN]: '马大仙法则'
         };
         
         const patternEmojis = {
             [CONFIG.PATTERN_TYPES.ASCENDING]: '📈',
             [CONFIG.PATTERN_TYPES.DESCENDING]: '📉',
-            [CONFIG.PATTERN_TYPES.SYMMETRICAL]: '🔄'
+            [CONFIG.PATTERN_TYPES.SYMMETRICAL]: '🔄',
+            [CONFIG.PATTERN_TYPES.MA_DAXIAN]: '⚡'
         };
 
         alertElement.innerHTML = `
@@ -165,7 +167,8 @@ class NotificationManager {
         const patternNames = {
             [CONFIG.PATTERN_TYPES.ASCENDING]: '上升三角形',
             [CONFIG.PATTERN_TYPES.DESCENDING]: '下降三角形',
-            [CONFIG.PATTERN_TYPES.SYMMETRICAL]: '收敛三角形'
+            [CONFIG.PATTERN_TYPES.SYMMETRICAL]: '收敛三角形',
+            [CONFIG.PATTERN_TYPES.MA_DAXIAN]: '马大仙法则'
         };
 
         const notification = new Notification(`${alert.symbol} 形态提醒`, {
