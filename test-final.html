@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>最终测试 - TradingView Binance</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #1e1e1e;
+            color: #ffffff;
+        }
+        .container {
+            max-width: 100%;
+            margin: 0 auto;
+        }
+        .chart {
+            width: 100%;
+            height: 400px;
+            margin: 10px 0;
+            border: 1px solid #333;
+            border-radius: 8px;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            background: #0a4f0a;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>TradingView + Binance 测试</h1>
+        <div class="status">使用TradingView内置Binance数据源</div>
+        
+        <div class="chart" id="tv_chart_container_1"></div>
+        <div class="chart" id="tv_chart_container_2"></div>
+    </div>
+
+    <script src="https://s3.tradingview.com/tv.js"></script>
+    <script>
+        function createChart(containerId, symbol) {
+            const widget = new TradingView.widget({
+                width: '100%',
+                height: 400,
+                symbol: `BINANCE:${symbol}`,
+                interval: '5',
+                timezone: 'Asia/Shanghai',
+                theme: 'dark',
+                style: '1',
+                locale: 'zh_CN',
+                toolbar_bg: '#1e1e1e',
+                enable_publishing: false,
+                hide_top_toolbar: false,
+                hide_legend: false,
+                save_image: false,
+                container_id: containerId,
+                studies: ['Volume@tv-basicstudies'],
+                overrides: {
+                    'paneProperties.background': '#1e1e1e',
+                    'paneProperties.vertGridProperties.color': '#363c4e',
+                    'paneProperties.horzGridProperties.color': '#363c4e',
+                    'scalesProperties.textColor': '#AAA'
+                }
+            });
+
+            widget.onChartReady(() => {
+                console.log(`${symbol} 图表已准备就绪`);
+            });
+
+            widget.onError((error) => {
+                console.error(`${symbol} 图表错误:`, error);
+            });
+
+            return widget;
+        }
+
+        // 创建两个测试图表
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                createChart('tv_chart_container_1', 'BTCUSDT');
+                createChart('tv_chart_container_2', 'ETHUSDT');
+            }, 1000);
+        });
+    </script>
+</body>
+</html>

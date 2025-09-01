@@ -78,7 +78,8 @@ class BinanceAPI {
 
     // 建立WebSocket连接获取实时数据
     subscribeToKlineStream(symbol, interval, callback) {
-        const streamName = `${symbol.toLowerCase()}@kline_${interval}`;
+        const baseSymbol = symbol.replace('USDT', '');
+        const streamName = `${baseSymbol.toLowerCase()}usdt@kline_${interval}`;
         const wsUrl = `${this.wsUrl}/${streamName}`;
         
         if (this.wsConnections.has(streamName)) {
@@ -201,7 +202,8 @@ class BinanceAPI {
 
     // 取消订阅
     unsubscribeFromKlineStream(symbol, interval) {
-        const streamName = `${symbol.toLowerCase()}@kline_${interval}`;
+        const baseSymbol = symbol.replace('USDT', '');
+        const streamName = `${baseSymbol.toLowerCase()}usdt@kline_${interval}`;
         const ws = this.wsConnections.get(streamName);
         
         if (ws) {

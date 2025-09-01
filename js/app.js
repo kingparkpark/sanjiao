@@ -127,6 +127,32 @@ class CryptoTriangleMonitor {
         }
     }
 
+    // 获取测试用的热门币种数据
+    getTestSymbols() {
+        return [
+            { symbol: 'BTCUSDT', price: 43250.50, change: 2.45, volume: 1234567890, high: 44000, low: 42800 },
+            { symbol: 'ETHUSDT', price: 2650.75, change: -1.23, volume: 987654321, high: 2700, low: 2600 },
+            { symbol: 'BNBUSDT', price: 315.20, change: 0.85, volume: 456789123, high: 320, low: 310 },
+            { symbol: 'ADAUSDT', price: 0.4521, change: 3.21, volume: 234567890, high: 0.46, low: 0.44 },
+            { symbol: 'SOLUSDT', price: 98.45, change: -2.15, volume: 345678901, high: 102, low: 96 },
+            { symbol: 'XRPUSDT', price: 0.6234, change: 1.87, volume: 567890123, high: 0.64, low: 0.61 },
+            { symbol: 'DOTUSDT', price: 7.123, change: -0.95, volume: 123456789, high: 7.3, low: 7.0 },
+            { symbol: 'AVAXUSDT', price: 36.78, change: 4.12, volume: 678901234, high: 38, low: 35 },
+            { symbol: 'MATICUSDT', price: 0.8765, change: 2.34, volume: 789012345, high: 0.89, low: 0.85 },
+            { symbol: 'LINKUSDT', price: 14.567, change: -1.45, volume: 890123456, high: 15, low: 14.2 },
+            { symbol: 'UNIUSDT', price: 6.789, change: 0.67, volume: 901234567, high: 6.9, low: 6.6 },
+            { symbol: 'LTCUSDT', price: 72.34, change: 1.23, volume: 12345678, high: 74, low: 71 },
+            { symbol: 'ATOMUSDT', price: 9.876, change: -2.34, volume: 123450987, high: 10.1, low: 9.7 },
+            { symbol: 'FILUSDT', price: 5.432, change: 3.45, volume: 234561098, high: 5.6, low: 5.2 },
+            { symbol: 'TRXUSDT', price: 0.1023, change: 0.98, volume: 345672109, high: 0.105, low: 0.100 },
+            { symbol: 'ETCUSDT', price: 26.78, change: -1.67, volume: 456783210, high: 27.5, low: 26.2 },
+            { symbol: 'XLMUSDT', price: 0.1234, change: 2.11, volume: 567894321, high: 0.126, low: 0.120 },
+            { symbol: 'VETUSDT', price: 0.0234, change: 1.45, volume: 678905432, high: 0.024, low: 0.023 },
+            { symbol: 'ICPUSDT', price: 12.34, change: -0.87, volume: 789016543, high: 12.8, low: 12.0 },
+            { symbol: 'THETAUSDT', price: 1.567, change: 2.78, volume: 890127654, high: 1.6, low: 1.5 }
+        ];
+    }
+
     // 启动应用
     async start() {
         if (this.isRunning) return;
@@ -135,27 +161,98 @@ class CryptoTriangleMonitor {
         this.updateConnectionStatus('connecting');
         
         try {
-            // 获取热门币种
-            console.log('获取热门币种...');
-            this.topSymbols = await binanceAPI.getTopSymbols();
+            // 检查TradingView库是否加载
+            console.log(`🔍 [DEBUG] Checking TradingView library status...`);
+            console.log(`🔍 [DEBUG] TradingView defined:`, typeof TradingView !== 'undefined');
+            console.log(`🔍 [DEBUG] TradingView.widget defined:`, typeof TradingView?.widget !== 'undefined');
             
-            if (this.topSymbols.length === 0) {
-                throw new Error('未能获取到热门币种数据');
+            if (typeof TradingView === 'undefined') {
+                console.log('⏳ [WARNING] TradingView library not loaded yet, waiting...');
+                setTimeout(() => {
+                    this.start();
+                }, 1000);
+                return;
             }
             
-            console.log(`成功获取${this.topSymbols.length}个热门币种`);
+            console.log(`✅ [SUCCESS] TradingView library is loaded and ready!`);
+            
+            // 检查是否为测试模式（当API请求失败时）
+            let useTestMode = false;
+            
+            try {
+                // 尝试获取热门币种
+                console.log('获取热门币种...');
+                this.topSymbols = await binanceAPI.getTopSymbols();
+                
+                if (this.topSymbols.length === 0) {
+                    throw new Error('未能获取到热门币种数据');
+                }
+            } catch (error) {
+                console.warn('API请求失败，切换到测试模式:', error.message);
+                useTestMode = true;
+                this.topSymbols = this.getTestSymbols();
+            }
+            
+            console.log(`成功获取${this.topSymbols.length}个热门币种${useTestMode ? '（测试模式）' : ''}`);
+            console.log('测试模式：将测试TradingView图表的错误处理机制');
             
             // 初始化图表
             chartManager.initializeCharts(this.topSymbols);
             
-            // 加载初始K线数据
-            await this.loadInitialData();
-            
-            // 启动实时数据订阅
-            this.startRealtimeUpdates();
-            
-            // 启动形态检测
-            this.startPatternDetection();
+            if (!useTestMode) {
+                // 加载初始K线数据
+                await this.loadInitialData();
+                
+                // 启动实时数据订阅
+                this.startRealtimeUpdates();
+                
+                // 启动形态检测
+                this.startPatternDetection();
+            } else {
+                console.log('测试模式：跳过实时数据和形态检测');
+                 console.log('测试模式启动完成 - 观察控制台查看symbol错误处理日志');
+                 
+                 // 测试模式 - 添加调试信息
+                 console.log('应用程序正在测试模式下运行，将测试TradingView图表错误处理机制');
+                 console.log('当前币种列表:', this.topSymbols ? this.topSymbols.map(s => s.symbol) : '未加载');
+ 
+                 // 监听TradingView加载状态
+                  if (typeof TradingView !== 'undefined') {
+                      console.log('TradingView库已加载');
+                  } else {
+                      console.log('等待TradingView库加载...');
+                      window.addEventListener('load', () => {
+                          setTimeout(() => {
+                              if (typeof TradingView !== 'undefined') {
+                                  console.log('TradingView库加载完成');
+                              } else {
+                                  console.error('TradingView库加载失败');
+                              }
+                          }, 1000);
+                      });
+                  }
+                  
+                  // 强制重新创建图表来测试修复
+                  setTimeout(() => {
+                      console.log('🔄 强制重新创建图表以测试修复效果');
+                      if (window.chartManager) {
+                          // 清除所有现有图表
+                          window.chartManager.charts.forEach((chart, symbol) => {
+                              try {
+                                  chart.remove();
+                              } catch (e) {
+                                  console.warn(`清除图表失败: ${symbol}`, e);
+                              }
+                          });
+                          window.chartManager.charts.clear();
+                          
+                          // 重新创建图表
+                          this.topSymbols.forEach(symbolData => {
+                              window.chartManager.createTradingViewChart(symbolData.symbol);
+                          });
+                      }
+                  }, 3000);
+            }
             
             this.updateConnectionStatus('connected');
             this.updateLastUpdateTime();

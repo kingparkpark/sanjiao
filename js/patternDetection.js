@@ -55,7 +55,7 @@ class PatternDetection {
 
             // 检查是否为局部高点
             for (let j = i - lookback; j <= i + lookback; j++) {
-                if (j !== i && klineData[j].high >= current.high) {
+                if (j !== i && (klineData[j].h || klineData[j].high) >= (current.h || current.high)) {
                     isHigh = false;
                     break;
                 }
@@ -64,8 +64,8 @@ class PatternDetection {
             if (isHigh) {
                 highs.push({
                     index: i,
-                    time: current.openTime,
-                    price: current.high
+                    time: current.x || current.openTime,
+                    price: current.h || current.high
                 });
             }
         }
@@ -84,7 +84,7 @@ class PatternDetection {
 
             // 检查是否为局部低点
             for (let j = i - lookback; j <= i + lookback; j++) {
-                if (j !== i && klineData[j].low <= current.low) {
+                if (j !== i && (klineData[j].l || klineData[j].low) <= (current.l || current.low)) {
                     isLow = false;
                     break;
                 }
@@ -93,8 +93,8 @@ class PatternDetection {
             if (isLow) {
                 lows.push({
                     index: i,
-                    time: current.openTime,
-                    price: current.low
+                    time: current.x || current.openTime,
+                    price: current.l || current.low
                 });
             }
         }

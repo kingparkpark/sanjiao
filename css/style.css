@@ -230,6 +230,44 @@ select:focus, button:focus {
     margin-bottom: 30px;
 }
 
+/* TradingView图表容器样式 */
+.chart-item {
+    background: var(--surface-color);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 20px;
+    box-shadow: var(--shadow);
+    transition: all 0.3s ease;
+    border: 1px solid var(--border-color);
+    position: relative;
+    overflow: hidden;
+}
+
+.chart-item:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+.chart-item.highlighted {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 20px rgba(240, 185, 11, 0.3);
+}
+
+.chart-item.pattern-ASCENDING {
+    border-color: var(--success-color);
+    box-shadow: 0 0 20px rgba(2, 192, 118, 0.3);
+}
+
+.chart-item.pattern-DESCENDING {
+    border-color: var(--danger-color);
+    box-shadow: 0 0 20px rgba(248, 73, 96, 0.3);
+}
+
+.chart-item.pattern-SYMMETRICAL {
+    border-color: var(--warning-color);
+    box-shadow: 0 0 20px rgba(252, 213, 53, 0.3);
+}
+
 .chart-container {
     background: var(--surface-color);
     border-radius: 12px;
@@ -251,6 +289,38 @@ select:focus, button:focus {
     margin-bottom: 15px;
     padding-bottom: 10px;
     border-bottom: 1px solid var(--border-color);
+}
+
+.chart-header h3 {
+    color: var(--text-primary);
+    font-size: 1.2em;
+    font-weight: 600;
+    margin: 0;
+}
+
+.chart-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--border-color);
+    transition: all 0.3s ease;
+}
+
+.status-dot.active {
+    background: var(--success-color);
+    box-shadow: 0 0 8px rgba(2, 192, 118, 0.5);
+}
+
+.price {
+    color: var(--text-primary);
+    font-size: 1em;
+    font-weight: 500;
 }
 
 .chart-title {
@@ -293,6 +363,61 @@ select:focus, button:focus {
     width: 100%;
     height: 300px;
     border-radius: 8px;
+}
+
+.tradingview-widget {
+    width: 100%;
+    height: 100%;
+    border-radius: 8px;
+    background: #1a1a1a;
+}
+
+.chart-info {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.9em;
+    color: var(--text-secondary);
+}
+
+.volume, .change {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.change span.positive {
+    color: var(--success-color);
+}
+
+.change span.negative {
+    color: var(--danger-color);
+}
+
+.chart-error {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: var(--text-secondary);
+    background: rgba(248, 73, 96, 0.1);
+    border-radius: 8px;
+}
+
+.chart-error button {
+    margin-top: 10px;
+    padding: 8px 16px;
+    background: var(--primary-color);
+    color: var(--secondary-color);
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.3s ease;
+}
+
+.chart-error button:hover {
+    background: #d4a00a;
 }
 
 /* 形态指示器 */

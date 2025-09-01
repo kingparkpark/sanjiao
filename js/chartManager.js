@@ -1,194 +1,626 @@
-// 图表管理器
+/**
+ * TradingView图表管理器 - 负责创建和管理所有币种的TradingView图表
+ */
 class ChartManager {
     constructor() {
         this.charts = new Map();
-        this.chartData = new Map();
+        this.chartData = new Map(); // 存储图表数据用于形态检测
+        this.chartsContainer = document.getElementById('charts-grid');
         this.cacheSize = 0;
         this.maxCacheSize = 50 * 1024 * 1024; // 50MB缓存限制
     }
 
-    // 初始化所有图表
-    initializeCharts(symbols) {
-        console.log('初始化图表容器...');
+    /**
+     * 初始化所有图表
+     * @param {Array} symbols - 币种列表
+     */
+    async initializeCharts(symbols) {
+        console.log('初始化TradingView图表容器...');
         
-        const chartsGrid = document.getElementById('charts-grid');
-        if (!chartsGrid) {
+        if (!this.chartsContainer) {
             console.error('找不到图表网格容器');
             return;
         }
 
-        // 清空现有内容
-        chartsGrid.innerHTML = '';
-
+        // 清空现有图表
+        this.clearCharts();
+        
+        // 显示加载状态
+        this.chartsContainer.innerHTML = '<div class="loading-message"><div class="spinner"></div><p>正在创建TradingView图表...</p></div>';
+        
         // 为每个币种创建图表容器
-        symbols.forEach(symbolData => {
-            this.createChartContainer(symbolData.symbol, symbolData.baseAsset, symbolData.quoteAsset);
-        });
+        const chartsHTML = symbols.map(symbolData => 
+            this.createChartContainer(symbolData.symbol)
+        ).join('');
+        
+        this.chartsContainer.innerHTML = chartsHTML;
+        
+        // 为每个币种初始化TradingView图表
+        for (const symbolData of symbols) {
+            await this.createTradingViewChart(symbolData.symbol);
+        }
 
-        console.log(`已创建 ${symbols.length} 个图表容器`);
+        console.log(`已创建 ${symbols.length} 个TradingView图表容器`);
     }
 
-    // 创建单个图表容器
-    createChartContainer(symbol, baseAsset, quoteAsset) {
-        const chartsGrid = document.getElementById('charts-grid');
-        
-        const container = document.createElement('div');
-        container.className = 'chart-container';
-        container.setAttribute('data-symbol', symbol);
-        
-        container.innerHTML = `
-            <div class="chart-header">
-                <h3 class="symbol-name">${symbol}</h3>
-                <div class="price-change">--</div>
-            </div>
-            <div class="chart-wrapper">
-                <canvas id="chart-${symbol}"></canvas>
-                <div id="loading-${symbol}" class="loading-indicator">
-                    <div class="spinner"></div>
-                    <span>加载中...</span>
+    /**
+     * 创建图表容器HTML
+     * @param {string} symbol - 币种符号
+     * @param {string} baseAsset - 基础资产（可选）
+     * @param {string} quoteAsset - 计价资产（可选）
+     * @returns {string} HTML字符串
+     */
+    createChartContainer(symbol, baseAsset = null, quoteAsset = null) {
+        return `
+            <div class="chart-item" data-symbol="${symbol}">
+                <div class="chart-header">
+                    <h3>${symbol}</h3>
+                    <div class="chart-status">
+                        <span class="status-dot"></span>
+                        <span class="price">--</span>
+                    </div>
+                </div>
+                <div class="chart-container">
+                    <div id="tradingview-${symbol}" class="tradingview-widget"></div>
+                </div>
+                <div class="chart-info">
+                    <div class="volume">成交量: <span>--</span></div>
+                    <div class="change">涨跌幅: <span>--</span></div>
                 </div>
             </div>
         `;
-        
-        chartsGrid.appendChild(container);
-        
-        // 创建图表实例
-        this.createChart(symbol);
     }
 
-    // 创建Chart.js实例
-    createChart(symbol) {
-        const canvas = document.getElementById(`chart-${symbol}`);
-        if (!canvas) {
-            console.error(`找不到画布元素: chart-${symbol}`);
-            return;
+    /**
+     * 获取TradingView symbol映射
+     * @param {string} symbol - 币种符号
+     * @returns {string} TradingView格式的symbol
+     */
+    getTradingViewSymbol(symbol) {
+        // 使用TradingView内置的Binance数据源
+        console.log(`[ChartManager] getTradingViewSymbol: 原始symbol: ${symbol}`);
+        
+        // 首先检查映射配置
+        const upperSymbol = symbol.toUpperCase();
+        if (CONFIG.SYMBOL_MAPPINGS && CONFIG.SYMBOL_MAPPINGS[upperSymbol]) {
+            const mappedSymbol = CONFIG.SYMBOL_MAPPINGS[upperSymbol];
+            console.log(`[ChartManager] getTradingViewSymbol: 使用映射配置: ${upperSymbol} -> ${mappedSymbol}`);
+            return mappedSymbol;
         }
-
-        const ctx = canvas.getContext('2d');
         
-        const config = {
-            type: 'line',
-            data: {
-                datasets: [{
-                    label: symbol,
-                    data: [],
-                    borderColor: '#4CAF50',
-                    backgroundColor: 'rgba(76, 175, 80, 0.1)',
-                    fill: false,
-                    tension: 0
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                scales: {
-                    x: {
-                        type: 'linear',
-                        position: 'bottom',
-                        title: {
-                            display: true,
-                            text: '时间'
-                        },
-                        ticks: {
-                            callback: function(value, index, values) {
-                                const date = new Date(value);
-                                return date.toLocaleTimeString('zh-CN', {
-                                    hour: '2-digit',
-                                    minute: '2-digit'
-                                });
-                            }
-                        }
-                    },
-                    y: {
-                        type: 'linear',
-                        position: 'left',
-                        title: {
-                            display: true,
-                            text: '价格'
-                        }
-                    }
-                },
-                plugins: {
-                    legend: {
-                        display: false
-                    },
-                    title: {
-                        display: false
-                    },
-                    tooltip: {
-                        callbacks: {
-                            title: function(context) {
-                                const date = new Date(context[0].parsed.x);
-                                return date.toLocaleString('zh-CN');
-                            },
-                            label: function(context) {
-                                const data = context.raw;
-                                const klineData = this.chartData.get(context.dataset.label) || [];
-                                const index = context.dataIndex;
-                                const kline = klineData[index];
-                                
-                                if (kline) {
-                                    return [
-                                        `开盘: ${parseFloat(kline.open).toFixed(4)}`,
-                                        `最高: ${parseFloat(kline.high).toFixed(4)}`,
-                                        `最低: ${parseFloat(kline.low).toFixed(4)}`,
-                                        `收盘: ${parseFloat(kline.close).toFixed(4)}`
-                                    ];
-                                }
-                                return `价格: ${data.y?.toFixed(4) || 'N/A'}`;
-                            }.bind(this)
-                        }
-                    }
-                },
-                interaction: {
-                    intersect: false,
-                    mode: 'index'
-                },
-                animation: {
-                    duration: 0
-                },
-                onHover: (event, elements) => {
-                    canvas.style.cursor = elements.length > 0 ? 'crosshair' : 'default';
-                }
-            }
-        };
-
-        // 创建图表实例
-        const chart = new Chart(ctx, config);
-        this.charts.set(symbol, chart);
-        this.chartData.set(symbol, []);
-
-        console.log(`图表 ${symbol} 创建成功`);
+        // 确保symbol格式正确
+        let cleanSymbol = upperSymbol;
         
-        // 隐藏加载指示器
-        setTimeout(() => {
-            const loading = document.getElementById(`loading-${symbol}`);
-            if (loading) loading.style.display = 'none';
-        }, 1000);
+        // 处理USDT后缀
+        if (!cleanSymbol.endsWith('USDT') && !cleanSymbol.includes('USD')) {
+            cleanSymbol = `${cleanSymbol}USDT`;
+        }
         
-        return chart;
+        // 添加BINANCE:前缀以使用Binance数据源
+        if (!cleanSymbol.startsWith('BINANCE:')) {
+            cleanSymbol = `BINANCE:${cleanSymbol}`;
+        }
+        
+        console.log(`[ChartManager] getTradingViewSymbol: TradingView symbol: ${cleanSymbol}`);
+        return cleanSymbol;
+    }
+    
+    /**
+     * 获取备选TradingView symbol格式
+     * @param {string} symbol - 原始symbol
+     * @returns {Array} 备选格式数组
+     */
+    getAlternativeTradingViewSymbols(symbol) {
+        const upperSymbol = symbol.toUpperCase();
+        
+        // 基础币种名（去除USDT后缀）
+        const baseSymbol = upperSymbol.replace('USDT', '');
+        
+        return [
+            // Binance格式
+            `BINANCE:${upperSymbol}`,
+            `BINANCE:${baseSymbol}USDT`,
+            `BINANCE:${baseSymbol}USD`,
+            `BINANCE:${baseSymbol}PERP`,
+            `BINANCE:${baseSymbol}.P`,
+            
+            // Bybit格式
+            `BYBIT:${upperSymbol}`,
+            `BYBIT:${baseSymbol}USDT`,
+            `BYBIT:${baseSymbol}USD`,
+            
+            // OKX格式
+            `OKX:${upperSymbol}`,
+            `OKX:${baseSymbol}USDT`,
+            `OKX:${baseSymbol}USD`,
+            
+            // Coinbase格式
+            `COINBASE:${baseSymbol}USD`,
+            `COINBASE:${baseSymbol}USDT`,
+            
+            // Kraken格式
+            `KRAKEN:${baseSymbol}USD`,
+            `KRAKEN:${baseSymbol}USDT`,
+            
+            // Huobi格式
+            `HUOBI:${upperSymbol}`,
+            `HUOBI:${baseSymbol}USDT`,
+            
+            // Gate格式
+            `GATE:${upperSymbol}`,
+            `GATE:${baseSymbol}USDT`,
+            
+            // MEXC格式
+            `MEXC:${upperSymbol}`,
+            `MEXC:${baseSymbol}USDT`,
+            
+            // 直接格式
+            upperSymbol,
+            baseSymbol,
+            `${baseSymbol}USDT`,
+            `${baseSymbol}USD`
+        ].filter((value, index, self) => self.indexOf(value) === index); // 去重
     }
 
-    // 更新图表数据
-    updateChartData(symbol, klineData) {
-        const chart = this.charts.get(symbol);
-        if (!chart || !klineData || klineData.length === 0) {
+    /**
+     * 创建TradingView图表
+     * @param {string} symbol - 币种符号
+     */
+    async createTradingViewChart(symbol) {
+        const container = document.getElementById(`tradingview-${symbol}`);
+        if (!container) {
+            console.error(`Container not found for symbol: ${symbol}`);
             return;
         }
 
         try {
-            // 转换K线数据为图表数据格式
-            const chartData = this.convertKlineToChartData(klineData);
+            const tradingViewSymbol = this.getTradingViewSymbol(symbol);
+            console.log(`🚀 [DEBUG] Creating TradingView chart for ${symbol} -> ${tradingViewSymbol}`);
+            console.log(`✅ [DEBUG] Container found for ${symbol}:`, container);
             
-            // 更新图表数据
-            chart.data.datasets[0].data = chartData;
-            chart.update('none');
+            const widget = new TradingView.widget({
+                width: '100%',
+                height: 300,
+                symbol: symbol, // 直接使用原始symbol
+                interval: '5',
+                timezone: 'Asia/Shanghai',
+                theme: 'dark',
+                style: '1', // 蜡烛图
+                locale: 'zh_CN',
+                toolbar_bg: '#1e1e1e',
+                enable_publishing: false,
+                hide_top_toolbar: true,
+                hide_legend: true,
+                save_image: false,
+                container_id: `tradingview-${symbol}`,
+                datafeed: new BinanceDatafeed(),
+                library_path: '/charting_library/',
+                studies: [
+                    'Volume@tv-basicstudies'
+                ],
+                overrides: {
+                    'paneProperties.background': '#1a1a1a',
+                    'paneProperties.vertGridProperties.color': '#2a2a2a',
+                    'paneProperties.horzGridProperties.color': '#2a2a2a',
+                    'symbolWatermarkProperties.transparency': 90,
+                    'scalesProperties.textColor': '#b2b5be',
+                    'mainSeriesProperties.candleStyle.upColor': '#26a69a',
+                    'mainSeriesProperties.candleStyle.downColor': '#ef5350',
+                    'mainSeriesProperties.candleStyle.drawWick': true,
+                    'mainSeriesProperties.candleStyle.drawBorder': true,
+                    'mainSeriesProperties.candleStyle.borderColor': '#378658',
+                    'mainSeriesProperties.candleStyle.borderUpColor': '#26a69a',
+                    'mainSeriesProperties.candleStyle.borderDownColor': '#ef5350',
+                    'mainSeriesProperties.candleStyle.wickUpColor': '#26a69a',
+                    'mainSeriesProperties.candleStyle.wickDownColor': '#ef5350',
+                    'volumePaneSize': 'small'
+                },
+                disabled_features: [
+                    'use_localstorage_for_settings',
+                    'volume_force_overlay',
+                    'create_volume_indicator_by_default',
+                    'header_compare',
+                    'header_undo_redo',
+                    'header_screenshot',
+                    'header_chart_type',
+                    'header_settings',
+                    'header_indicators',
+                    'header_symbol_search',
+                    'symbol_search_hot_key',
+                    'header_resolutions',
+                    'timeframes_toolbar'
+                ],
+                enabled_features: [
+                    'hide_left_toolbar'
+                ],
+                loading_screen: {
+                    backgroundColor: '#1a1a1a',
+                    foregroundColor: '#2962ff'
+                },
+                // 图表就绪回调
+                onChartReady: () => {
+                    console.log(`🎉 [SUCCESS] TradingView chart ready for ${symbol} using ${tradingViewSymbol}`);
+                    this.updateStatusDot(symbol, true);
+                    
+                    // 监听图表错误事件
+                    widget.onChartReady(() => {
+                        console.log(`📡 [DEBUG] Setting up symbol change listener for ${symbol}`);
+                        widget.chart().onSymbolChanged().subscribe(null, (symbolInfo) => {
+                            console.log(`🔄 [DEBUG] Symbol changed event for ${symbol}:`, symbolInfo);
+                            if (symbolInfo && symbolInfo.error) {
+                                console.warn(`⚠️ [WARNING] Symbol error for ${symbol}:`, symbolInfo.error);
+                                this.handleSymbolError(symbol, tradingViewSymbol);
+                            }
+                        });
+                    });
+                },
+                // 添加错误处理回调
+                onError: (error) => {
+                    console.error(`💥 [ERROR] TradingView error for ${symbol} using ${tradingViewSymbol}:`, error);
+                    console.error(`💥 [ERROR] Error details:`, JSON.stringify(error, null, 2));
+                    this.handleSymbolError(symbol, tradingViewSymbol);
+                }
+            });
 
-            // 存储数据
-            this.chartData.set(symbol, klineData);
+            this.charts.set(symbol, widget);
 
-            // 更新价格变化显示
-            this.updatePriceChange(symbol, klineData);
+        } catch (error) {
+            console.error(`💥 [CATCH ERROR] Failed to create TradingView chart for ${symbol}:`, error);
+            console.error(`💥 [CATCH ERROR] Error stack:`, error.stack);
+            console.error(`💥 [CATCH ERROR] TradingView available:`, typeof TradingView !== 'undefined');
+            console.error(`💥 [CATCH ERROR] TradingView.widget available:`, typeof TradingView?.widget !== 'undefined');
+            
+            // 处理symbol错误，尝试使用其他交易所前缀
+            await this.handleSymbolError(symbol, tradingViewSymbol);
+        }
+    }
+
+    /**
+     * 处理symbol错误，自动尝试备选交易所
+     * @param {string} symbol - 币种符号
+     * @param {string} failedSymbol - 失败的TradingView symbol
+     */
+    async handleSymbolError(symbol, failedSymbol) {
+        console.log(`❌ Symbol error detected for ${symbol}`);
+        console.log(`🔍 Failed symbol: ${failedSymbol}`);
+        console.log(`🔄 Starting alternative symbol search process`);
+        
+        // 销毁当前图表
+        if (this.charts.has(symbol)) {
+            try {
+                console.log(`🧹 Removing existing chart widget for ${symbol}`);
+                this.charts.get(symbol).remove();
+                console.log(`✅ Chart widget removed successfully for ${symbol}`);
+            } catch (e) {
+                console.warn(`⚠️ Error removing chart for ${symbol}:`, e);
+            }
+            this.charts.delete(symbol);
+            console.log(`📝 Chart reference deleted from charts map for ${symbol}`);
+        }
+        
+        // 尝试备选交易所
+        console.log(`🚀 Initiating alternative symbols search for ${symbol}`);
+        await this.tryAlternativeSymbols(symbol, failedSymbol);
+    }
+
+    /**
+     * 尝试使用其他交易所前缀创建图表
+     * @param {string} symbol - 币种符号
+     * @param {string} excludeSymbol - 要排除的已失败symbol
+     */
+    async tryAlternativeSymbols(symbol, excludeSymbol = null) {
+        // 为不同类型的币种提供更智能的备选方案
+        let alternatives = [];
+        
+        // 获取基础symbol（去除USDT后缀）
+        const baseSymbol = symbol.replace('USDT', '');
+        
+        // 由于getTradingViewSymbol已经优先使用BINANCE，这里提供其他交易所作为备选
+        alternatives = [
+            `BYBIT:${symbol}`,
+            `OKX:${symbol}`,
+            `COINBASE:${symbol.replace('USDT', 'USD')}`,
+            `KRAKEN:${symbol.replace('USDT', 'USD')}`,
+            `HUOBI:${symbol}`,
+            `GATE:${symbol}`,
+            `MEXC:${symbol}`,
+            // 尝试不同的symbol格式
+            `BINANCE:${baseSymbol}USD`,
+            `BINANCE:${baseSymbol}BUSD`,
+            `BINANCE:${baseSymbol}BTC`,
+            symbol // 不带前缀，最后尝试
+        ];
+        
+        console.log(`📋 Prepared ${alternatives.length} alternative exchanges for ${symbol}`);
+        
+        // 排除已经失败的symbol
+        const filteredAlternatives = alternatives.filter(alt => alt !== excludeSymbol);
+        
+        const container = document.getElementById(`tradingview-${symbol}`);
+        if (!container) return;
+        
+        console.log(`Trying ${filteredAlternatives.length} alternative symbols for ${symbol} (${isNewToken ? 'new token' : 'mainstream token'})`);
+        
+        for (const altSymbol of filteredAlternatives) {
+            try {
+                console.log(`Trying alternative symbol: ${altSymbol}`);
+                
+                const widget = new TradingView.widget({
+                    width: '100%',
+                    height: 300,
+                    symbol: altSymbol,
+                    interval: '5',
+                    timezone: 'Asia/Shanghai',
+                    theme: 'dark',
+                    style: '1',
+                    locale: 'zh_CN',
+                    toolbar_bg: '#1e1e1e',
+                    enable_publishing: false,
+                    hide_top_toolbar: true,
+                    hide_legend: true,
+                    save_image: false,
+                    container_id: `tradingview-${symbol}`,
+                    studies: ['Volume@tv-basicstudies'],
+                    overrides: {
+                        'paneProperties.background': '#1a1a1a',
+                        'paneProperties.vertGridProperties.color': '#2a2a2a',
+                        'paneProperties.horzGridProperties.color': '#2a2a2a',
+                        'symbolWatermarkProperties.transparency': 90,
+                        'scalesProperties.textColor': '#b2b5be',
+                        'mainSeriesProperties.candleStyle.upColor': '#26a69a',
+                        'mainSeriesProperties.candleStyle.downColor': '#ef5350',
+                        'mainSeriesProperties.candleStyle.borderUpColor': '#26a69a',
+                        'mainSeriesProperties.candleStyle.borderDownColor': '#ef5350',
+                        'mainSeriesProperties.candleStyle.wickUpColor': '#26a69a',
+                        'mainSeriesProperties.candleStyle.wickDownColor': '#ef5350'
+                    },
+                    disabled_features: [
+                        'use_localstorage_for_settings',
+                        'volume_force_overlay',
+                        'create_volume_indicator_by_default',
+                        'header_compare',
+                        'header_undo_redo',
+                        'header_screenshot',
+                        'header_chart_type',
+                        'header_settings',
+                        'header_indicators',
+                        'header_symbol_search',
+                        'symbol_search_hot_key',
+                        'header_resolutions',
+                        'timeframes_toolbar'
+                    ],
+                    enabled_features: ['hide_left_toolbar'],
+                    loading_screen: {
+                        backgroundColor: '#1a1a1a',
+                        foregroundColor: '#2962ff'
+                    },
+                    onChartReady: () => {
+                        console.log(`TradingView chart ready for ${symbol} using ${altSymbol}`);
+                        this.updateStatusDot(symbol, true);
+                        
+                        // 监听图表错误事件
+                        widget.onChartReady(() => {
+                            widget.chart().onSymbolChanged().subscribe(null, (symbolInfo) => {
+                                if (symbolInfo && symbolInfo.error) {
+                                    console.warn(`Symbol error for ${symbol} using ${altSymbol}:`, symbolInfo.error);
+                                    // 继续尝试下一个备选symbol
+                                    this.tryNextAlternative(symbol, altSymbol, filteredAlternatives);
+                                }
+                            });
+                        });
+                    },
+                    // 添加错误处理回调
+                    onError: (error) => {
+                        console.error(`TradingView error for ${symbol} using ${altSymbol}:`, error);
+                        this.tryNextAlternative(symbol, altSymbol, filteredAlternatives);
+                    }
+                });
+                
+                this.charts.set(symbol, widget);
+                console.log(`Successfully created chart for ${symbol} using ${altSymbol}`);
+                return; // 成功创建，退出循环
+                
+            } catch (error) {
+                console.warn(`Failed to create chart with ${altSymbol}:`, error);
+                continue; // 尝试下一个
+            }
+        }
+        
+        // 所有尝试都失败，显示错误
+        this.showChartError(symbol);
+    }
+
+    /**
+     * 尝试下一个备选symbol
+     * @param {string} symbol - 币种符号
+     * @param {string} failedSymbol - 失败的symbol
+     * @param {Array} alternatives - 备选symbol列表
+     */
+    async tryNextAlternative(symbol, failedSymbol, alternatives) {
+        // 销毁当前图表
+        if (this.charts.has(symbol)) {
+            try {
+                this.charts.get(symbol).remove();
+            } catch (e) {
+                console.warn('Error removing chart:', e);
+            }
+            this.charts.delete(symbol);
+        }
+        
+        // 找到当前失败symbol的索引
+        const currentIndex = alternatives.indexOf(failedSymbol);
+        const remainingAlternatives = alternatives.slice(currentIndex + 1);
+        
+        if (remainingAlternatives.length > 0) {
+            console.log(`Trying next alternative for ${symbol}, remaining: ${remainingAlternatives.length}`);
+            // 直接尝试剩余的备选项，而不是重新开始整个列表
+            await this.tryAlternativeSymbolsFromList(symbol, remainingAlternatives);
+        } else {
+            console.log(`All alternatives exhausted for ${symbol}`);
+            this.showChartError(symbol);
+        }
+    }
+
+    /**
+     * 从指定的备选symbol列表中尝试创建图表
+     * @param {string} symbol - 币种符号
+     * @param {Array} alternatives - 备选symbol列表
+     */
+    async tryAlternativeSymbolsFromList(symbol, alternatives) {
+        if (!alternatives || alternatives.length === 0) {
+            console.warn(`❌ No more alternatives available for ${symbol}`);
+            console.log(`🚫 Showing error message for ${symbol}`);
+            this.showChartError(symbol);
+            return;
+        }
+        
+        const container = document.getElementById(`tradingview-${symbol}`);
+        if (!container) {
+            console.error(`❌ Container not found for ${symbol}`);
+            return;
+        }
+        
+        console.log(`🔄 Trying ${alternatives.length} remaining alternative symbols for ${symbol}`);
+        
+        for (const altSymbol of alternatives) {
+            try {
+                console.log(`🎯 Trying alternative symbol: ${altSymbol} for ${symbol}`);
+                console.log(`📊 Remaining alternatives: ${alternatives.length - alternatives.indexOf(altSymbol) - 1}`);
+                
+                const widget = new TradingView.widget({
+                    width: '100%',
+                    height: 300,
+                    symbol: altSymbol,
+                    interval: '5',
+                    timezone: 'Asia/Shanghai',
+                    theme: 'dark',
+                    style: '1',
+                    locale: 'zh_CN',
+                    toolbar_bg: '#1e1e1e',
+                    enable_publishing: false,
+                    hide_top_toolbar: true,
+                    hide_legend: true,
+                    save_image: false,
+                    container_id: `tradingview-${symbol}`,
+                    studies: ['Volume@tv-basicstudies'],
+                    overrides: {
+                        'paneProperties.background': '#1a1a1a',
+                        'paneProperties.vertGridProperties.color': '#2a2a2a',
+                        'paneProperties.horzGridProperties.color': '#2a2a2a',
+                        'symbolWatermarkProperties.transparency': 90,
+                        'scalesProperties.textColor': '#b2b5be',
+                        'mainSeriesProperties.candleStyle.upColor': '#26a69a',
+                        'mainSeriesProperties.candleStyle.downColor': '#ef5350',
+                        'mainSeriesProperties.candleStyle.borderUpColor': '#26a69a',
+                        'mainSeriesProperties.candleStyle.borderDownColor': '#ef5350',
+                        'mainSeriesProperties.candleStyle.wickUpColor': '#26a69a',
+                        'mainSeriesProperties.candleStyle.wickDownColor': '#ef5350'
+                    },
+                    disabled_features: [
+                        'use_localstorage_for_settings',
+                        'volume_force_overlay',
+                        'create_volume_indicator_by_default',
+                        'header_compare',
+                        'header_undo_redo',
+                        'header_screenshot',
+                        'header_chart_type',
+                        'header_settings',
+                        'header_indicators',
+                        'header_symbol_search',
+                        'symbol_search_hot_key',
+                        'header_resolutions',
+                        'timeframes_toolbar'
+                    ],
+                    enabled_features: ['hide_left_toolbar'],
+                    loading_screen: {
+                        backgroundColor: '#1a1a1a',
+                        foregroundColor: '#2962ff'
+                    },
+                    onChartReady: () => {
+                        console.log(`TradingView chart ready for ${symbol} using ${altSymbol}`);
+                        this.updateStatusDot(symbol, true);
+                        
+                        // 监听图表错误事件
+                        widget.onChartReady(() => {
+                            widget.chart().onSymbolChanged().subscribe(null, (symbolInfo) => {
+                                if (symbolInfo && symbolInfo.error) {
+                                    console.warn(`Symbol error for ${symbol} using ${altSymbol}:`, symbolInfo.error);
+                                    // 继续尝试下一个备选symbol
+                                    this.tryNextAlternative(symbol, altSymbol, alternatives);
+                                }
+                            });
+                        });
+                    },
+                    // 添加错误处理回调
+                    onError: (error) => {
+                        console.error(`TradingView error for ${symbol} using ${altSymbol}:`, error);
+                        this.tryNextAlternative(symbol, altSymbol, alternatives);
+                    }
+                });
+                
+                this.charts.set(symbol, widget);
+                console.log(`Successfully created chart for ${symbol} using ${altSymbol}`);
+                return; // 成功创建，退出循环
+                
+            } catch (error) {
+                console.warn(`Failed to create chart with ${altSymbol}:`, error);
+                continue; // 尝试下一个
+            }
+        }
+        
+        // 所有尝试都失败，显示错误
+        this.showChartError(symbol);
+    }
+
+    /**
+     * 显示图表错误
+     * @param {string} symbol - 币种符号
+     */
+    showChartError(symbol) {
+        const container = document.getElementById(`tradingview-${symbol}`);
+        if (container) {
+            container.innerHTML = `
+                <div class="chart-error">
+                    <p>图表加载失败</p>
+                    <button onclick="chartManager.retryChart('${symbol}')">重试</button>
+                </div>
+            `;
+        }
+    }
+
+    /**
+     * 重试创建图表
+     * @param {string} symbol - 币种符号
+     */
+    async retryChart(symbol) {
+        await this.createTradingViewChart(symbol);
+    }
+
+    /**
+     * 更新图表数据（TradingView自动更新，这里主要用于形态检测数据存储）
+     * @param {string} symbol - 币种符号
+     * @param {Array} klineData - K线数据
+     */
+    updateChartData(symbol, klineData) {
+        if (!klineData || klineData.length === 0) {
+            return;
+        }
+
+        try {
+            // 存储数据用于形态检测
+            const chartData = klineData.map(kline => ({
+                x: kline.openTime || kline[0], // 时间戳
+                o: parseFloat(kline.open || kline[1]), // 开盘价
+                h: parseFloat(kline.high || kline[2]), // 最高价
+                l: parseFloat(kline.low || kline[3]), // 最低价
+                c: parseFloat(kline.close || kline[4]), // 收盘价
+                v: parseFloat(kline.volume || kline[5])  // 成交量
+            }));
+
+            this.chartData.set(symbol, chartData);
+
+            // 更新价格显示
+            this.updatePriceDisplay(symbol, chartData);
 
             console.log(`图表 ${symbol} 数据更新完成`);
         } catch (error) {
@@ -196,89 +628,136 @@ class ChartManager {
         }
     }
 
-    // 转换K线数据为图表数据格式
-    convertKlineToChartData(klineData) {
-        return klineData.map(kline => ({
-            x: kline.openTime,
-            y: parseFloat(kline.close)
-        }));
+    /**
+     * 更新价格显示
+     * @param {string} symbol - 币种符号
+     * @param {Array} chartData - 图表数据
+     */
+    updatePriceDisplay(symbol, chartData) {
+        const chartItem = document.querySelector(`[data-symbol="${symbol}"]`);
+        if (!chartItem || chartData.length === 0) return;
+
+        const latestData = chartData[chartData.length - 1];
+        const previousData = chartData[chartData.length - 2];
+        
+        const priceElement = chartItem.querySelector('.price');
+        const changeElement = chartItem.querySelector('.change span');
+        const volumeElement = chartItem.querySelector('.volume span');
+        
+        if (priceElement) {
+            priceElement.textContent = latestData.c.toFixed(4);
+        }
+        
+        if (changeElement && previousData) {
+            const change = ((latestData.c - previousData.c) / previousData.c * 100);
+            changeElement.textContent = `${change >= 0 ? '+' : ''}${change.toFixed(2)}%`;
+            changeElement.className = change >= 0 ? 'positive' : 'negative';
+        }
+        
+        if (volumeElement) {
+            volumeElement.textContent = this.formatVolume(latestData.v);
+        }
     }
 
-    // 更新实时K线数据
-    updateRealtimeKline(symbol, kline) {
-        const chart = this.charts.get(symbol);
-        if (!chart) return;
+    /**
+     * 格式化成交量显示
+     * @param {number} volume - 成交量
+     * @returns {string} 格式化后的成交量
+     */
+    formatVolume(volume) {
+        if (volume >= 1e9) {
+            return (volume / 1e9).toFixed(2) + 'B';
+        } else if (volume >= 1e6) {
+            return (volume / 1e6).toFixed(2) + 'M';
+        } else if (volume >= 1e3) {
+            return (volume / 1e3).toFixed(2) + 'K';
+        }
+        return volume.toFixed(2);
+    }
 
+    /**
+     * 更新状态指示器
+     * @param {string} symbol - 币种符号
+     * @param {boolean} active - 是否活跃
+     */
+    updateStatusDot(symbol, active) {
+        const chartItem = document.querySelector(`[data-symbol="${symbol}"]`);
+        if (!chartItem) return;
+        
+        const statusDot = chartItem.querySelector('.status-dot');
+        if (statusDot) {
+            statusDot.className = `status-dot ${active ? 'active' : ''}`;
+        }
+    }
+
+    /**
+     * 更新实时K线数据（TradingView自动处理实时数据）
+     * @param {string} symbol - 币种符号
+     * @param {Object} kline - K线数据
+     */
+    updateRealtimeKline(symbol, kline) {
         try {
-            const data = chart.data.datasets[0].data;
             const storedData = this.chartData.get(symbol) || [];
             
-            const newKlineData = {
-                x: kline.openTime,
-                y: parseFloat(kline.close)
-            };
-
             const newStoredKline = {
-                openTime: kline.openTime,
-                open: kline.open,
-                high: kline.high,
-                low: kline.low,
-                close: kline.close
+                x: kline.openTime,
+                o: parseFloat(kline.open),
+                h: parseFloat(kline.high),
+                l: parseFloat(kline.low),
+                c: parseFloat(kline.close),
+                v: parseFloat(kline.volume || 0)
             };
 
             if (kline.isFinal) {
                  // 如果是完成的K线，添加新数据点
-                 data.push(newKlineData);
                  storedData.push(newStoredKline);
                  
                  // 保持数据长度限制
-                 if (data.length > CONFIG.APP.KLINE_LIMIT) {
-                     data.shift();
+                 if (storedData.length > (CONFIG.APP?.KLINE_LIMIT || 1000)) {
                      storedData.shift();
                  }
              } else {
                  // 如果是未完成的K线，更新最后一个数据点
-                 if (data.length > 0) {
-                     data[data.length - 1] = newKlineData;
-                 }
                  if (storedData.length > 0) {
                      storedData[storedData.length - 1] = newStoredKline;
+                 } else {
+                     storedData.push(newStoredKline);
                  }
              }
 
             // 更新存储的数据
             this.chartData.set(symbol, storedData);
-
-            chart.update('none');
             
             // 更新价格显示
-            this.updatePriceChange(symbol, storedData);
+            this.updatePriceDisplay(symbol, storedData);
         } catch (error) {
             console.error(`更新实时K线 ${symbol} 失败:`, error);
         }
     }
 
-    // 更新价格变化显示
-    updatePriceChange(symbol, klineData) {
-        if (!klineData || klineData.length < 2) return;
+    /**
+     * 高亮显示图表（用于形态检测提醒）
+     * @param {string} symbol - 币种符号
+     * @param {string} patternType - 形态类型
+     */
+    highlightChart(symbol, patternType) {
+        const chartItem = document.querySelector(`[data-symbol="${symbol}"]`);
+        if (!chartItem) return;
 
-        const container = document.querySelector(`[data-symbol="${symbol}"]`);
-        if (!container) return;
-
-        const priceElement = container.querySelector('.price-change');
-        if (!priceElement) return;
-
-        const currentPrice = parseFloat(klineData[klineData.length - 1].close);
-        const previousPrice = parseFloat(klineData[klineData.length - 2].close);
+        // 添加高亮样式
+        chartItem.classList.add('highlighted', `pattern-${patternType}`);
         
-        const change = currentPrice - previousPrice;
-        const changePercent = (change / previousPrice * 100).toFixed(2);
-
-        priceElement.textContent = `${currentPrice.toFixed(4)} (${change >= 0 ? '+' : ''}${changePercent}%)`;
-        priceElement.className = `price-change ${change >= 0 ? 'positive' : 'negative'}`;
+        // 5秒后移除高亮
+        setTimeout(() => {
+            chartItem.classList.remove('highlighted', `pattern-${patternType}`);
+        }, 5000);
     }
 
-    // 显示形态指示器
+    /**
+     * 显示形态指示器
+     * @param {string} symbol - 币种符号
+     * @param {Object} pattern - 形态信息
+     */
     showPatternIndicator(symbol, pattern) {
         const container = document.querySelector(`[data-symbol="${symbol}"]`);
         if (!container) return;
@@ -304,50 +783,104 @@ class ChartManager {
             if (indicator.parentNode) {
                 indicator.remove();
             }
-        }, CONFIG.APP.PATTERN_DISPLAY_DURATION);
+        }, (CONFIG.APP?.PATTERN_DISPLAY_DURATION || 5000));
     }
 
-    // 获取形态类型文本
+    /**
+     * 获取形态类型文本
+     * @param {string} type - 形态类型
+     * @returns {string} 形态类型文本
+     */
     getPatternTypeText(type) {
         const typeTexts = {
-            [CONFIG.PATTERN_TYPES.ASCENDING]: '上升三角形',
-            [CONFIG.PATTERN_TYPES.DESCENDING]: '下降三角形',
-            [CONFIG.PATTERN_TYPES.SYMMETRICAL]: '收敛三角形'
+            'ASCENDING': '上升三角形',
+            'DESCENDING': '下降三角形',
+            'SYMMETRICAL': '收敛三角形'
         };
         return typeTexts[type] || '未知形态';
     }
 
-    // 获取图表数据
+    /**
+     * 获取图表数据（用于形态检测）
+     * @param {string} symbol - 币种符号
+     * @returns {Array} 图表数据
+     */
     getChartData(symbol) {
         return this.chartData.get(symbol) || [];
     }
 
-    // 更新时间周期
-    updateTimeframe(timeframe) {
-        console.log(`更新图表时间周期: ${timeframe}`);
-        // 清空所有图表数据
-        this.charts.forEach((chart, symbol) => {
-            chart.data.datasets[0].data = [];
-            chart.update('none');
-            this.chartData.set(symbol, []);
+    /**
+     * 更新图表时间周期
+     * @param {string} interval - 时间周期
+     */
+    updateTimeframe(interval) {
+        console.log(`更新图表时间周期: ${interval}`);
+        
+        // TradingView时间周期映射
+        const intervalMap = {
+            '1m': '1',
+            '5m': '5',
+            '15m': '15',
+            '1h': '60',
+            '4h': '240',
+            '1d': '1D'
+        };
+
+        const tvInterval = intervalMap[interval] || '5';
+        
+        this.charts.forEach((widget, symbol) => {
+            try {
+                if (widget && typeof widget.setSymbol === 'function') {
+                    widget.setSymbol(`BINANCE:${symbol}`, tvInterval);
+                }
+            } catch (error) {
+                console.warn(`Failed to update interval for ${symbol}:`, error);
+            }
         });
+        
+        // 清空存储的数据
+        this.chartData.clear();
     }
 
-    // 销毁所有图表
-    destroyAllCharts() {
-        console.log('销毁所有图表...');
-        
-        this.charts.forEach((chart, symbol) => {
+    /**
+     * 清空所有图表
+     */
+    clearCharts() {
+        // 清理TradingView图表实例
+        this.charts.forEach((widget, symbol) => {
             try {
-                chart.destroy();
+                if (widget && typeof widget.remove === 'function') {
+                    widget.remove();
+                }
             } catch (error) {
-                console.error(`销毁图表 ${symbol} 失败:`, error);
+                console.warn(`Failed to remove chart for ${symbol}:`, error);
             }
         });
         
         this.charts.clear();
         this.chartData.clear();
+        
+        // 清空容器
+        if (this.chartsContainer) {
+            this.chartsContainer.innerHTML = '';
+        }
+    }
+
+    /**
+     * 销毁所有图表
+     */
+    destroyAllCharts() {
+        console.log('销毁所有TradingView图表...');
+        this.clearCharts();
         console.log('所有图表已销毁');
+    }
+
+    /**
+     * 获取图表数量
+     * @returns {number} 图表数量
+     */
+    getChartsCount() {
+        return this.charts.size;
     }
 
     // 清理缓存
