@@ -17,7 +17,8 @@ const CONFIG = {
         DEFAULT_TIMEFRAME: '5m',
         UPDATE_INTERVAL: 5000, // 5秒更新一次
         KLINE_LIMIT: 100, // 获取K线数量
-        PATTERN_MIN_POINTS: 5, // 三角形态最少需要的点数
+        PATTERN_MIN_POINTS: 3, // 三角形态最少需要的点数（降低要求）
+        PATTERN_TOLERANCE: 0.025, // 形态检测容差（2.5%，增加容差）
         PATTERN_EXPIRE_TIME: 300000, // 形态过期时间（5分钟）
         MAX_WEBSOCKET_CONNECTIONS: 50, // 最大WebSocket连接数
         MEMORY_CLEANUP_INTERVAL: 30000, // 内存清理间隔（30秒）
@@ -96,16 +97,16 @@ const CONFIG = {
     // 形态检测配置
     PATTERN: {
         TRIANGLE: {
-            MIN_TOUCHES: 4, // 最少触碰点数
-            MAX_DEVIATION: 0.02, // 最大偏差（2%）
-            MIN_DURATION: 3600000, // 最小持续时间（1小时）
-            BREAKOUT_THRESHOLD: 0.005 // 突破阈值（0.5%）
+            MIN_TOUCHES: 3, // 最少触碰点数（降低要求）
+            MAX_DEVIATION: 0.035, // 最大偏差（3.5%，增加容差）
+            MIN_DURATION: 1800000, // 最小持续时间（30分钟，降低要求）
+            BREAKOUT_THRESHOLD: 0.003 // 突破阈值（0.3%，降低要求）
         },
         MA_DAXIAN: {
             PERIODS: [20, 60, 120], // MA和EMA的周期
-            CONVERGENCE_THRESHOLD: 0.001, // 收敛阈值（0.1%）
-            MIN_CONVERGENCE_DURATION: 1800000, // 最小收敛持续时间（30分钟）
-            SIGNAL_STRENGTH: 0.8 // 信号强度阈值
+            CONVERGENCE_THRESHOLD: 0.002, // 收敛阈值（0.2%，增加容差）
+            MIN_CONVERGENCE_DURATION: 900000, // 最小收敛持续时间（15分钟，降低要求）
+            SIGNAL_STRENGTH: 0.6 // 信号强度阈值（降低要求）
         }
     },
     

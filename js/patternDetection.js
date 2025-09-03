@@ -8,18 +8,30 @@ class PatternDetection {
 
     // 主要的形态检测函数 - 支持多种形态检测
     detectPatterns(klineData, symbol) {
+        console.log(`[形态检测] 开始检测 ${symbol}，数据点数: ${klineData ? klineData.length : 0}`);
         const patterns = [];
+        
+        if (!klineData || klineData.length < this.minPoints * 2) {
+            console.log(`[形态检测] ${symbol} 数据不足，需要至少 ${this.minPoints * 2} 个数据点`);
+            return null;
+        }
         
         // 检测三角形态
         const trianglePattern = this.detectTrianglePatterns(klineData, symbol);
         if (trianglePattern) {
+            console.log(`[形态检测] ${symbol} 检测到三角形态:`, trianglePattern.type, '置信度:', trianglePattern.confidence);
             patterns.push(trianglePattern);
         }
         
         // 检测马大仙法则（MA/EMA收敛）
         const maDaxianPattern = this.detectMaDaxianPattern(klineData, symbol);
         if (maDaxianPattern) {
+            console.log(`[形态检测] ${symbol} 检测到马大仙形态，置信度:`, maDaxianPattern.confidence);
             patterns.push(maDaxianPattern);
+        }
+        
+        if (patterns.length === 0) {
+            console.log(`[形态检测] ${symbol} 未检测到任何形态`);
         }
         
         return patterns.length > 0 ? patterns : null;
@@ -33,8 +45,11 @@ class PatternDetection {
 
         const highs = this.extractHighs(klineData);
         const lows = this.extractLows(klineData);
+        
+        console.log(`[三角形态] ${symbol} 提取到 ${highs.length} 个高点, ${lows.length} 个低点`);
 
         if (highs.length < this.minPoints || lows.length < this.minPoints) {
+            console.log(`[三角形态] ${symbol} 高低点数量不足，需要至少 ${this.minPoints} 个`);
             return null;
         }
 
@@ -42,6 +57,10 @@ class PatternDetection {
         const ascendingTriangle = this.detectAscendingTriangle(highs, lows);
         const descendingTriangle = this.detectDescendingTriangle(highs, lows);
         const symmetricalTriangle = this.detectSymmetricalTriangle(highs, lows);
+        
+        console.log(`[三角形态] ${symbol} 检测结果 - 上升:`, ascendingTriangle ? ascendingTriangle.confidence : 'null', 
+                   '下降:', descendingTriangle ? descendingTriangle.confidence : 'null',
+                   '对称:', symmetricalTriangle ? symmetricalTriangle.confidence : 'null');
 
         // 返回最强的形态
         const patterns = [ascendingTriangle, descendingTriangle, symmetricalTriangle]
