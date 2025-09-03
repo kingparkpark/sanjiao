@@ -13,9 +13,10 @@ class ChartManager {
     /**
      * 初始化所有图表
      * @param {Array} symbols - 币种列表
+     * @param {string} interval - 时间周期，默认为5分钟
      */
-    async initializeCharts(symbols) {
-        console.log('初始化TradingView图表容器...');
+    async initializeCharts(symbols, interval = '5') {
+        console.log(`初始化TradingView图表容器，时间周期: ${interval}`);
         
         if (!this.chartsContainer) {
             console.error('找不到图表网格容器');
@@ -35,12 +36,15 @@ class ChartManager {
         
         this.chartsContainer.innerHTML = chartsHTML;
         
+        // 初始化事件监听器
+        this.initializeIndividualTimeframeControls();
+        
         // 为每个币种初始化TradingView图表
         for (const symbolData of symbols) {
-            await this.createTradingViewChart(symbolData.symbol);
+            await this.createTradingViewChart(symbolData.symbol, interval);
         }
 
-        console.log(`已创建 ${symbols.length} 个TradingView图表容器`);
+        console.log(`已创建 ${symbols.length} 个TradingView图表容器，时间周期: ${interval}`);
     }
 
     /**
@@ -51,21 +55,41 @@ class ChartManager {
      * @returns {string} HTML字符串
      */
     createChartContainer(symbol, baseAsset = null, quoteAsset = null) {
+        const displaySymbol = symbol.toUpperCase();
         return `
             <div class="chart-item" data-symbol="${symbol}">
-                <div class="chart-header">
-                    <h3>${symbol}</h3>
-                    <div class="chart-status">
-                        <span class="status-dot"></span>
-                        <span class="price">--</span>
+                <div class="chart-item-header">
+                    <div class="chart-item-title">
+                        ${displaySymbol}
+                        <span class="chart-item-symbol">USDT</span>
+                    </div>
+                    <div class="chart-controls">
+                        <label>周期:</label>
+                        <select class="time-selector" data-symbol="${symbol}" title="选择时间周期">
+                            <option value="1">1分钟</option>
+                            <option value="3">3分钟</option>
+                            <option value="5" selected>5分钟</option>
+                            <option value="15">15分钟</option>
+                            <option value="30">30分钟</option>
+                            <option value="60">1小时</option>
+                            <option value="240">4小时</option>
+                            <option value="D">1天</option>
+                        </select>
                     </div>
                 </div>
-                <div class="chart-container">
-                    <div id="tradingview-${symbol}" class="tradingview-widget"></div>
-                </div>
-                <div class="chart-info">
-                    <div class="volume">成交量: <span>--</span></div>
-                    <div class="change">涨跌幅: <span>--</span></div>
+                <div class="chart-content">
+                    <div class="tradingview-widget-container" id="tradingview-${symbol}" style="height: 100%;">
+                        <div class="tradingview-widget-container__widget" style="height: 100%;"></div>
+                        <div class="tradingview-widget-copyright">
+                            <a href="https://cn.tradingview.com/symbols/${displaySymbol}USDT/?exchange=BINANCE" rel="noopener" target="_blank">
+                                <span class="blue-text">${displaySymbol}USDT图表</span>
+                            </a>由TradingView提供
+                        </div>
+                    </div>
+                    <div class="chart-error" style="display: none;">
+                        <p>图表加载失败</p>
+                        <button onclick="chartManager.retryChart('${symbol}')">重试</button>
+                    </div>
                 </div>
             </div>
         `;
@@ -80,16 +104,8 @@ class ChartManager {
         // 使用TradingView内置的Binance数据源
         console.log(`[ChartManager] getTradingViewSymbol: 原始symbol: ${symbol}`);
         
-        // 首先检查映射配置
-        const upperSymbol = symbol.toUpperCase();
-        if (CONFIG.SYMBOL_MAPPINGS && CONFIG.SYMBOL_MAPPINGS[upperSymbol]) {
-            const mappedSymbol = CONFIG.SYMBOL_MAPPINGS[upperSymbol];
-            console.log(`[ChartManager] getTradingViewSymbol: 使用映射配置: ${upperSymbol} -> ${mappedSymbol}`);
-            return mappedSymbol;
-        }
-        
         // 确保symbol格式正确
-        let cleanSymbol = upperSymbol;
+        let cleanSymbol = symbol.toUpperCase();
         
         // 处理USDT后缀
         if (!cleanSymbol.endsWith('USDT') && !cleanSymbol.includes('USD')) {
@@ -165,8 +181,9 @@ class ChartManager {
     /**
      * 创建TradingView图表
      * @param {string} symbol - 币种符号
+     * @param {string} interval - 时间周期，默认为5分钟
      */
-    async createTradingViewChart(symbol) {
+    async createTradingViewChart(symbol, interval = '5') {
         const container = document.getElementById(`tradingview-${symbol}`);
         if (!container) {
             console.error(`Container not found for symbol: ${symbol}`);
@@ -182,7 +199,7 @@ class ChartManager {
                 width: '100%',
                 height: 300,
                 symbol: symbol, // 直接使用原始symbol
-                interval: '5',
+                interval: interval,
                 timezone: 'Asia/Shanghai',
                 theme: 'dark',
                 style: '1', // 蜡烛图
@@ -339,7 +356,10 @@ class ChartManager {
         const container = document.getElementById(`tradingview-${symbol}`);
         if (!container) return;
         
-        console.log(`Trying ${filteredAlternatives.length} alternative symbols for ${symbol} (${isNewToken ? 'new token' : 'mainstream token'})`);
+        // 获取当前时间周期
+        const currentInterval = document.querySelector(`[data-symbol="${symbol}"].time-selector`)?.value || '5';
+        
+        console.log(`Trying ${filteredAlternatives.length} alternative symbols for ${symbol} with interval ${currentInterval}`);
         
         for (const altSymbol of filteredAlternatives) {
             try {
@@ -349,7 +369,7 @@ class ChartManager {
                     width: '100%',
                     height: 300,
                     symbol: altSymbol,
-                    interval: '5',
+                    interval: currentInterval,
                     timezone: 'Asia/Shanghai',
                     theme: 'dark',
                     style: '1',
@@ -813,7 +833,7 @@ class ChartManager {
      * 更新图表时间周期
      * @param {string} interval - 时间周期
      */
-    updateTimeframe(interval) {
+    async updateTimeframe(interval) {
         console.log(`更新图表时间周期: ${interval}`);
         
         // TradingView时间周期映射
@@ -828,18 +848,58 @@ class ChartManager {
 
         const tvInterval = intervalMap[interval] || '5';
         
-        this.charts.forEach((widget, symbol) => {
-            try {
-                if (widget && typeof widget.setSymbol === 'function') {
-                    widget.setSymbol(`BINANCE:${symbol}`, tvInterval);
-                }
-            } catch (error) {
-                console.warn(`Failed to update interval for ${symbol}:`, error);
-            }
-        });
+        // 获取当前监控的币种列表
+        const symbols = Array.from(this.charts.keys());
+        
+        // 销毁现有图表
+        this.clearCharts();
+        
+        // 重新创建图表容器
+        if (this.chartsContainer) {
+            const chartsHTML = symbols.map(symbol => 
+                this.createChartContainer(symbol)
+            ).join('');
+            this.chartsContainer.innerHTML = chartsHTML;
+        }
+        
+        // 重新创建图表，使用新的时间周期
+        for (const symbol of symbols) {
+            await this.createTradingViewChart(symbol, tvInterval);
+        }
+        
+        console.log(`时间周期更新完成: ${interval} (${tvInterval})`);
         
         // 清空存储的数据
         this.chartData.clear();
+    }
+
+    /**
+     * 切换到指定的时间周期（用于多时间周期功能）
+     * @param {string} targetTimeframe - 目标时间周期
+     * @param {Array} availableTimeframes - 可用的时间周期列表
+     */
+    async switchToTimeframe(targetTimeframe, availableTimeframes = []) {
+        console.log(`切换到时间周期: ${targetTimeframe}`);
+        
+        // 验证目标时间周期是否在可用列表中
+        if (availableTimeframes.length > 0 && !availableTimeframes.includes(targetTimeframe)) {
+            console.warn(`时间周期 ${targetTimeframe} 不在可用列表中:`, availableTimeframes);
+            return;
+        }
+        
+        // 更新图表显示
+        await this.updateTimeframe(targetTimeframe);
+        
+        // 触发自定义事件，通知其他组件时间周期已切换
+        const event = new CustomEvent('timeframeSwitched', {
+            detail: {
+                newTimeframe: targetTimeframe,
+                availableTimeframes: availableTimeframes
+            }
+        });
+        document.dispatchEvent(event);
+        
+        console.log(`时间周期切换完成: ${targetTimeframe}`);
     }
 
     /**
@@ -863,6 +923,75 @@ class ChartManager {
         // 清空容器
         if (this.chartsContainer) {
             this.chartsContainer.innerHTML = '';
+        }
+    }
+
+    /**
+     * 初始化每个图表的独立时间周期控制
+     */
+    initializeIndividualTimeframeControls() {
+        // 为每个时间选择器添加事件监听器
+        const timeSelectors = document.querySelectorAll('.time-selector');
+        timeSelectors.forEach(selector => {
+            selector.addEventListener('change', (event) => {
+                const symbol = event.target.dataset.symbol;
+                const interval = event.target.value;
+                this.updateIndividualChartTimeframe(symbol, interval);
+            });
+        });
+    }
+
+    /**
+     * 更新单个图表的时间周期
+     * @param {string} symbol - 币种符号
+     * @param {string} interval - 时间周期
+     */
+    async updateIndividualChartTimeframe(symbol, interval) {
+        console.log(`更新 ${symbol} 图表时间周期: ${interval}`);
+        
+        // TradingView时间周期映射
+        const intervalMap = {
+            '1': '1',
+            '3': '3',
+            '5': '5',
+            '15': '15',
+            '30': '30',
+            '60': '60',
+            '240': '240',
+            'D': '1D'
+        };
+
+        const tvInterval = intervalMap[interval] || '5';
+        
+        const container = document.getElementById(`tradingview-${symbol}`);
+        if (!container) {
+            console.error(`Container not found for symbol: ${symbol}`);
+            return;
+        }
+
+        try {
+            // 销毁现有图表
+            if (this.charts.has(symbol)) {
+                const widget = this.charts.get(symbol);
+                if (widget && typeof widget.remove === 'function') {
+                    widget.remove();
+                }
+                this.charts.delete(symbol);
+            }
+
+            // 重新创建图表，使用新的时间周期
+            await this.createTradingViewChart(symbol, tvInterval);
+            
+            // 更新选择器显示
+            const selector = document.querySelector(`[data-symbol="${symbol}"].time-selector`);
+            if (selector) {
+                selector.value = interval;
+            }
+
+            console.log(`${symbol} 图表时间周期更新完成: ${interval} -> ${tvInterval}`);
+            
+        } catch (error) {
+            console.error(`更新 ${symbol} 图表时间周期失败:`, error);
         }
     }
 

@@ -1,15 +1,17 @@
 # 币安三角形态监控系统
 
-一个实时监控币安合约交易平台前20个热门币种K线图和三角形态检测的Web应用。
+一个实时监控币安合约交易平台热门币种的多时间周期三角形态检测Web应用。
 
 ## 功能特性
 
 - 🔄 **实时数据**: 通过币安API获取实时K线数据
-- 📊 **图表显示**: 使用Chart.js显示专业的蜡烛图
+- ⏰ **多时间周期**: 支持1分钟、5分钟、15分钟、1小时、4小时、1天等多个时间周期
+- 📊 **图表显示**: 使用TradingView图表显示专业的蜡烛图
 - 🔺 **形态识别**: 自动检测上升、下降、收敛三角形态
 - 🔔 **智能提醒**: 浏览器通知、页面提示、音频提醒
 - 📱 **响应式设计**: 适配各种屏幕尺寸
-- ⚡ **性能优化**: 内存管理和WebSocket连接优化
+- ⚡ **性能优化**: WebSocket连接管理和内存优化
+- 🎯 **时间周期切换**: 直观的时间周期选择器，支持快速切换
 
 ## 快速开始
 
@@ -36,17 +38,19 @@ npx serve .
 ## 项目结构
 
 ```
-├── index.html          # 主页面
+├── index.html              # 主页面
 ├── css/
-│   └── style.css      # 样式文件
+│   └── style.css          # 样式文件
 ├── js/
-│   ├── app.js         # 主应用程序
-│   ├── binanceApi.js  # 币安API模块
-│   ├── chartManager.js # 图表管理器
-│   ├── config.js      # 配置文件
-│   ├── notifications.js # 通知系统
-│   └── patternDetection.js # 形态检测算法
-└── package.json       # 项目配置
+│   ├── app.js             # 主应用程序
+│   ├── binanceApi.js      # 币安API模块
+│   ├── binanceDatafeed.js # TradingView数据源
+│   ├── chartManager.js    # 图表管理器
+│   ├── config.js          # 配置文件
+│   ├── notifications.js   # 通知系统
+│   ├── patternDetection.js # 形态检测算法
+│   └── timeframeSwitcher.js # 时间周期切换器
+└── package.json           # 项目配置
 ```
 
 ## 技术栈

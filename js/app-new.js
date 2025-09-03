@@ -3,10 +3,14 @@ class CryptoTriangleMonitor {
     constructor() {
         this.isRunning = false;
         this.currentTimeframe = CONFIG.APP.DEFAULT_TIMEFRAME;
+        this.selectedTimeframes = [CONFIG.APP.DEFAULT_TIMEFRAME]; // 支持多时间周期
         this.topSymbols = [];
         this.updateInterval = null;
         this.patternCheckInterval = null;
         this.connectionStatus = 'disconnected';
+        this.timeframeData = new Map(); // 存储各时间周期的数据
+        this.timeframeSwitcher = new TimeframeSwitcher();
+        this.chartManager = chartManager; // 引用全局chartManager实例
         
         this.init();
     }
@@ -34,7 +38,15 @@ class CryptoTriangleMonitor {
 
     // 绑定事件监听器
     bindEventListeners() {
-        // 时间周期选择
+        // 多时间周期选择器
+        const applyTimeframesBtn = document.getElementById('apply-timeframes');
+        if (applyTimeframesBtn) {
+            applyTimeframesBtn.addEventListener('click', () => {
+                this.applySelectedTimeframes();
+            });
+        }
+        
+        // 保持原有的单选时间周期兼容性
         const timeframeSelect = document.getElementById('timeframe');
         if (timeframeSelect) {
             timeframeSelect.addEventListener('change', (e) => {
@@ -63,7 +75,8 @@ class CryptoTriangleMonitor {
         const filterCheckboxes = [
             'filter-ascending',
             'filter-descending', 
-            'filter-symmetrical'
+            'filter-symmetrical',
+            'filter-ma-daxian'
         ];
         
         filterCheckboxes.forEach(id => {
@@ -73,6 +86,34 @@ class CryptoTriangleMonitor {
                     this.updatePatternFilters();
                 });
             }
+        });
+        
+        // 时间周期过滤器
+        const timeframeFilterCheckboxes = [
+            'filter-1m',
+            'filter-5m',
+            'filter-15m',
+            'filter-1h',
+            'filter-4h',
+            'filter-1d'
+        ];
+        
+        timeframeFilterCheckboxes.forEach(id => {
+            const checkbox = document.getElementById(id);
+            if (checkbox) {
+                checkbox.addEventListener('change', () => {
+                    this.updateTimeframeFilters();
+                    this.updateTimeframeSwitcher();
+                });
+            }
+        });
+        
+        // 初始化时间周期切换器
+        this.initializeTimeframeSwitcher();
+        
+        // 监听时间周期切换事件
+        document.addEventListener('timeframeSwitched', (event) => {
+            this.handleTimeframeSwitched(event.detail);
         });
 
         // 模态框关闭
@@ -182,7 +223,7 @@ class CryptoTriangleMonitor {
             try {
                 // 尝试获取热门币种
                 console.log('获取热门币种...');
-                this.topSymbols = await binanceAPI.getTopSymbols();
+                this.topSymbols = await window.binanceAPI.getTopSymbols();
                 
                 if (this.topSymbols.length === 0) {
                     throw new Error('未能获取到热门币种数据');
@@ -197,7 +238,16 @@ class CryptoTriangleMonitor {
             console.log('测试模式：将测试TradingView图表的错误处理机制');
             
             // 初始化图表
-            chartManager.initializeCharts(this.topSymbols);
+            const intervalMap = {
+                '1m': '1',
+                '5m': '5',
+                '15m': '15',
+                '1h': '60',
+                '4h': '240',
+                '1d': '1D'
+            };
+            const tvInterval = intervalMap[this.currentTimeframe] || '5';
+            chartManager.initializeCharts(this.topSymbols, tvInterval);
             
             if (!useTestMode) {
                 // 加载初始K线数据
@@ -271,7 +321,7 @@ class CryptoTriangleMonitor {
         console.log('加载初始K线数据...');
         
         const symbols = this.topSymbols.map(s => s.symbol);
-        const batchData = await binanceAPI.getBatchKlineData(
+        const batchData = await window.binanceAPI.getBatchKlineData(
             symbols, 
             this.currentTimeframe, 
             CONFIG.APP.KLINE_LIMIT
@@ -287,13 +337,51 @@ class CryptoTriangleMonitor {
         console.log('初始数据加载完成');
     }
 
+    // 加载多时间周期数据
+    async loadMultiTimeframeData() {
+        console.log('加载多时间周期数据...', this.selectedTimeframes);
+        
+        try {
+            // 清空现有数据
+            this.timeframeData.clear();
+            
+            for (const timeframe of this.selectedTimeframes) {
+                console.log(`加载 ${timeframe} 时间周期数据...`);
+                const symbols = this.topSymbols.map(s => s.symbol);
+                const batchData = await window.binanceAPI.getBatchKlineData(
+                    symbols,
+                    timeframe,
+                    CONFIG.APP.KLINE_LIMIT
+                );
+                
+                // 存储时间周期数据
+                this.timeframeData.set(timeframe, batchData);
+                
+                // 如果是主时间周期，也更新图表
+                if (timeframe === this.currentTimeframe) {
+                    for (const [symbol, klineData] of Object.entries(batchData)) {
+                        if (klineData && klineData.length > 0) {
+                            chartManager.updateChartData(symbol, klineData);
+                        }
+                    }
+                }
+                
+                console.log(`${timeframe} 时间周期数据加载完成`);
+            }
+            
+            console.log('多时间周期数据加载完成');
+        } catch (error) {
+            console.error('加载多时间周期数据失败:', error);
+        }
+    }
+
     // 启动实时数据更新
     startRealtimeUpdates() {
         console.log('启动实时数据订阅...');
         
         // 为每个币种订阅WebSocket数据流
         this.topSymbols.forEach(symbolData => {
-            binanceAPI.subscribeToKlineStream(
+            window.binanceAPI.subscribeToKlineStream(
                 symbolData.symbol,
                 this.currentTimeframe,
                 (symbol, kline) => {
@@ -310,7 +398,13 @@ class CryptoTriangleMonitor {
         
         // 定期清理失效连接和内存
         this.cleanupInterval = setInterval(() => {
-            const cleaned = binanceApi.cleanupDeadConnections();
+            // 确保API已加载
+            if (!window.binanceAPI && !window.binanceApi) {
+                console.warn('BinanceAPI not loaded yet, skipping cleanup');
+                return;
+            }
+            const api = window.binanceAPI || window.binanceApi;
+            const cleaned = api.cleanupDeadConnections();
             if (cleaned > 0) {
                 console.log(`清理了${cleaned}个失效连接`);
             }
@@ -332,7 +426,8 @@ class CryptoTriangleMonitor {
         
         // 如果是完成的K线，触发形态检测
         if (kline.isFinal) {
-            this.checkPatternForSymbol(symbol);
+            // 检测当前时间周期的形态
+            this.checkPatternForSymbol(symbol, this.currentTimeframe);
         }
     }
 
@@ -351,15 +446,29 @@ class CryptoTriangleMonitor {
 
     // 运行形态检测
     runPatternDetection() {
+        console.log('开始多时间周期形态检测...');
+        
         // 批量处理，避免阻塞UI
         const batchSize = 5;
         let index = 0;
+        let detectedCount = 0;
         
         const processBatch = () => {
             const endIndex = Math.min(index + batchSize, this.topSymbols.length);
             
             for (let i = index; i < endIndex; i++) {
-                this.checkPatternForSymbol(this.topSymbols[i].symbol);
+                // 对每个选中的时间周期进行检测
+                for (const timeframe of this.selectedTimeframes) {
+                    // 检查时间周期过滤器是否启用
+                    if (!this.isTimeframeFilterEnabled(timeframe)) {
+                        continue;
+                    }
+                    
+                    const patterns = this.checkPatternForSymbol(this.topSymbols[i].symbol, timeframe);
+                    if (patterns) {
+                        detectedCount++;
+                    }
+                }
             }
             
             index = endIndex;
@@ -370,6 +479,7 @@ class CryptoTriangleMonitor {
             } else {
                 // 所有检测完成后清理过期形态
                 patternDetection.clearExpiredPatterns();
+                console.log(`多时间周期形态检测完成，检测到 ${detectedCount} 个形态`);
             }
         };
         
@@ -377,31 +487,46 @@ class CryptoTriangleMonitor {
     }
 
     // 检测单个币种的形态
-    checkPatternForSymbol(symbol) {
-        const klineData = chartManager.getChartData(symbol);
+    checkPatternForSymbol(symbol, timeframe = null) {
+        // 如果指定了时间周期，使用对应的数据，否则使用图表数据
+        let klineData;
+        if (timeframe && this.timeframeData.has(timeframe)) {
+            klineData = this.timeframeData.get(timeframe)[symbol];
+        } else {
+            klineData = chartManager.getChartData(symbol);
+        }
         
         if (!klineData || klineData.length < CONFIG.APP.PATTERN_MIN_POINTS * 2) {
-            return;
+            return null;
         }
         
         try {
             const pattern = patternDetection.detectTrianglePatterns(klineData, symbol);
             
             if (pattern && this.isPatternFilterEnabled(pattern.type)) {
-                console.log(`检测到形态:`, pattern);
+                // 添加时间周期信息
+                pattern.timeframe = timeframe || this.currentTimeframe;
                 
-                // 显示形态指示器
-                chartManager.showPatternIndicator(symbol, pattern);
+                console.log(`检测到形态 [${pattern.timeframe}]:`, pattern);
+                
+                // 只在主时间周期显示形态指示器
+                if (!timeframe || timeframe === this.currentTimeframe) {
+                    chartManager.showPatternIndicator(symbol, pattern);
+                }
                 
                 // 发送通知
-            notificationManager.sendPatternAlert(pattern);
-            
-            // 更新通知计数
-            this.updateNotificationCount();
+                notificationManager.sendPatternAlert(pattern);
+                
+                // 更新通知计数
+                this.updateNotificationCount();
+                
+                return pattern;
             }
         } catch (error) {
-            console.error(`${symbol} 形态检测失败:`, error);
+            console.error(`${symbol} [${timeframe || this.currentTimeframe}] 形态检测失败:`, error);
         }
+        
+        return null;
     }
 
     // 检查形态过滤器是否启用
@@ -424,13 +549,111 @@ class CryptoTriangleMonitor {
         this.runPatternDetection();
     }
 
+    // 更新时间周期过滤器
+    updateTimeframeFilters() {
+        console.log('时间周期过滤器已更新');
+        // 重新运行形态检测以应用新的过滤器
+        this.runPatternDetection();
+    }
+
+    // 检查时间周期过滤器是否启用
+    isTimeframeFilterEnabled(timeframe) {
+        const filterMap = {
+            '1m': 'filter-1m',
+            '5m': 'filter-5m',
+            '15m': 'filter-15m',
+            '1h': 'filter-1h',
+            '4h': 'filter-4h',
+            '1d': 'filter-1d'
+        };
+        
+        const checkbox = document.getElementById(filterMap[timeframe]);
+        return checkbox ? checkbox.checked : true;
+    }
+
+    // 初始化时间周期切换器
+    initializeTimeframeSwitcher() {
+        console.log('初始化时间周期切换器...');
+        this.updateTimeframeSwitcher();
+    }
+
+    // 更新时间周期切换器
+    updateTimeframeSwitcher() {
+        const enabledTimeframes = this.getEnabledTimeframes();
+        
+        // 触发自定义事件通知切换器更新
+        const event = new CustomEvent('timeframeSwitcherUpdate', {
+            detail: {
+                enabledTimeframes: enabledTimeframes,
+                currentTimeframe: this.currentTimeframe
+            }
+        });
+        document.dispatchEvent(event);
+        
+        console.log('时间周期切换器已更新，可用时间周期:', enabledTimeframes);
+    }
+
+    // 获取启用的时间周期
+    getEnabledTimeframes() {
+        const timeframes = ['1m', '5m', '15m', '1h', '4h', '1d'];
+        return timeframes.filter(tf => this.isTimeframeFilterEnabled(tf));
+    }
+
+    // 处理时间周期切换事件
+     async handleTimeframeSwitched(detail) {
+         const { newTimeframe, availableTimeframes } = detail;
+         
+         if (newTimeframe && newTimeframe !== this.currentTimeframe) {
+             console.log(`时间周期切换器触发切换: ${this.currentTimeframe} -> ${newTimeframe}`);
+             
+             // 使用图表管理器的切换方法
+             await this.chartManager.switchToTimeframe(newTimeframe, availableTimeframes);
+             
+             // 更新当前时间周期
+             this.currentTimeframe = newTimeframe;
+             
+             console.log(`时间周期切换完成: ${newTimeframe}`);
+         }
+     }
+
     // 切换时间周期
+    // 应用选中的多时间周期
+    async applySelectedTimeframes() {
+        const checkboxes = document.querySelectorAll('.timeframe-option input[type="checkbox"]:checked');
+        const selectedTimeframes = Array.from(checkboxes).map(cb => cb.value);
+        
+        if (selectedTimeframes.length === 0) {
+            this.showError('请至少选择一个时间周期');
+            return;
+        }
+        
+        console.log('应用选中的时间周期:', selectedTimeframes);
+        
+        this.selectedTimeframes = selectedTimeframes;
+        this.currentTimeframe = selectedTimeframes[0]; // 主显示时间周期
+        
+        // 停止当前订阅
+        this.stopRealtimeUpdates();
+        
+        // 更新图表显示
+        chartManager.updateTimeframe(this.currentTimeframe);
+        
+        // 重新加载所有选中时间周期的数据
+        await this.loadMultiTimeframeData();
+        
+        // 重新启动实时更新
+        this.startRealtimeUpdates();
+        
+        console.log('多时间周期应用完成');
+    }
+    
     async changeTimeframe(newTimeframe) {
         if (newTimeframe === this.currentTimeframe) return;
         
         console.log(`切换时间周期: ${this.currentTimeframe} -> ${newTimeframe}`);
         
         this.currentTimeframe = newTimeframe;
+        this.selectedTimeframes = [newTimeframe]; // 单选模式
         
         // 停止当前订阅
         this.stopRealtimeUpdates();
@@ -450,7 +673,7 @@ class CryptoTriangleMonitor {
     // 停止实时更新
     stopRealtimeUpdates() {
         // 关闭WebSocket连接
-        binanceAPI.closeAllConnections();
+        window.binanceAPI.closeAllConnections();
         
         // 清除定时器
         if (this.updateInterval) {
@@ -544,7 +767,7 @@ class CryptoTriangleMonitor {
 
     // 检查连接状态
     checkConnectionStatus() {
-        const status = binanceAPI.getConnectionStatus();
+        const status = window.binanceAPI.getConnectionStatus();
         
         if (status.connected === status.total && status.total > 0) {
             this.updateConnectionStatus('connected');
@@ -714,7 +937,7 @@ class CryptoTriangleMonitor {
         
         this.stop();
         chartManager.destroyAllCharts();
-        binanceAPI.closeAllConnections();
+        window.binanceAPI.closeAllConnections();
     }
 
     // 获取应用状态

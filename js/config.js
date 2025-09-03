@@ -13,7 +13,7 @@ const CONFIG = {
     
     // 应用配置
     APP: {
-        TOP_SYMBOLS_COUNT: 20,
+        TOP_SYMBOLS_COUNT: 10,
         DEFAULT_TIMEFRAME: '5m',
         UPDATE_INTERVAL: 5000, // 5秒更新一次
         KLINE_LIMIT: 100, // 获取K线数量
@@ -119,7 +119,7 @@ const CONFIG = {
     
     // 通知配置
     NOTIFICATIONS: {
-        ENABLED: false,
+        ENABLED: true,
         SOUND_ENABLED: true,
         SHOW_BROWSER_NOTIFICATION: true,
         AUTO_DISMISS_TIME: 10000 // 10秒后自动消失

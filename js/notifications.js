@@ -131,7 +131,7 @@ class NotificationManager {
                 <span class="alert-emoji">${patternEmojis[alert.type]}</span>
                 <span class="alert-text">
                     <strong>${alert.symbol}</strong> 检测到 ${patternNames[alert.type]}
-                    <br><small>置信度: ${(alert.confidence * 100).toFixed(0)}%</small>
+                    <br><small>时间周期: <span class="timeframe-badge">${alert.timeframe || '1h'}</span> | 置信度: ${(alert.confidence * 100).toFixed(0)}%</small>
                 </span>
             </div>
             <div class="alert-time">${alert.timestamp.toLocaleTimeString('zh-CN')}</div>
@@ -145,9 +145,9 @@ class NotificationManager {
         // 插入到列表顶部
         notificationsList.insertBefore(alertElement, notificationsList.firstChild);
 
-        // 限制显示数量
+        // 限制显示数量 - 增加到20条
         const alerts = notificationsList.children;
-        if (alerts.length > 10) {
+        if (alerts.length > 20) {
             notificationsList.removeChild(alerts[alerts.length - 1]);
         }
 
@@ -172,10 +172,10 @@ class NotificationManager {
         };
 
         const notification = new Notification(`${alert.symbol} 形态提醒`, {
-            body: `检测到 ${patternNames[alert.type]}，置信度: ${(alert.confidence * 100).toFixed(0)}%`,
+            body: `[${alert.timeframe || '1h'}] 检测到 ${patternNames[alert.type]}，置信度: ${(alert.confidence * 100).toFixed(0)}%`,
             icon: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIHZpZXdCb3g9IjAgMCA2NCA2NCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiByeD0iMTIiIGZpbGw9IiMxZTNjNzIiLz4KPHBhdGggZD0iTTMyIDEyTDUyIDQ0SDE2TDMyIDEyWiIgZmlsbD0iI2ZmZDcwMCIvPgo8L3N2Zz4K',
             badge: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTEyIDJMMjIgMjBIMkwxMiAyWiIgZmlsbD0iI2ZmZDcwMCIvPgo8L3N2Zz4K',
-            tag: `pattern-${alert.symbol}`,
+            tag: `pattern-${alert.symbol}-${alert.timeframe}`,
             requireInteraction: alert.confidence > 0.8,
             silent: false
         });
